@@ -215,7 +215,13 @@ function countAll(re, src) {
  * uzunligi aniq bo'lishi va atrofida base64 belgisi bo'lmasligi shart.
  */
 const SECRET_PATTERNS = [
-  { re: /(?<![0-9A-Za-z_\-])AIza[0-9A-Za-z_\-]{35}(?![0-9A-Za-z_\-])/g, nom: 'Google/Gemini API key' },
+  { re: /(?<![0-9A-Za-z_\-])AIza[0-9A-Za-z_\-]{35}(?![0-9A-Za-z_\-])/g, nom: 'Google/Gemini API key (AIza)' },
+  /* Google'ning yangi formatdagi kaliti: `AQ.` + ~50 belgi.
+     Dastlabki auditda bu format qidirilmagan va faylga o'rnatilgan
+     kalit topilmay qolgan — shu sababdan qo'shildi. */
+  { re: /(?<![0-9A-Za-z_\-])AQ\.[0-9A-Za-z_\-]{40,60}(?![0-9A-Za-z_\-])/g, nom: 'Google/Gemini API key (AQ.)' },
+  /* base64 ichiga yashirilgan kalit: atob("Z3NrX...") = "gsk_..." */
+  { re: /(?<![0-9A-Za-z+/])(?:Z3NrX|QUl6YV|c2st)[0-9A-Za-z+/]{30,}={0,2}/g, nom: 'base64 ichiga yashirilgan API key' },
   { re: /(?<![0-9A-Za-z_\-])gsk_[0-9A-Za-z]{52}(?![0-9A-Za-z_\-])/g, nom: 'Groq API key' },
   { re: /(?<![0-9A-Za-z_\-])sk-(?:proj-)?[0-9A-Za-z_\-]{32,}(?![0-9A-Za-z_\-])/g, nom: 'OpenAI API key' },
   { re: /(?<![0-9A-Za-z_\-])gh[pousr]_[0-9A-Za-z]{36}(?![0-9A-Za-z_\-])/g, nom: 'GitHub token' },

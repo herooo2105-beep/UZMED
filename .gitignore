@@ -1,0 +1,13 @@
+# API kalitlari — ommaviy repoga HECH QACHON tushmasin.
+# Oldingi versiyada kalit HTML ichiga o'rnatilgan edi va Groq uni
+# ommaviy repo sababli avtomatik bekor qildi.
+patches/keys.local.json
+*.local.json
+
+# Kalit o'rnatilgan build (faqat shaxsiy tarqatish uchun)
+UZMED__keys.html
+UZMED__keys.zip
+
+# Ish fayllari
+node_modules/
+*.log
