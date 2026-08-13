@@ -7,29 +7,36 @@ internetsiz ishlaydi.
 
 ## ⬇️ Ilovani yuklab olish
 
-**[UZMED__.zip — oxirgi versiya (33 MB)](../../raw/main/UZMED__.zip)**
+**[UZMED.zip — oxirgi versiya, AI kalitlari o'rnatilgan (33 MB)](../../raw/main/UZMED.zip)**
 
-Zipni oching → ichida bitta **`UZMED__.html`** fayli bo'ladi. Boshqa hech narsa
+Zipni oching → ichida bitta **`UZMED.html`** fayli bo'ladi. Boshqa hech narsa
 kerak emas: shu faylni brauzerda ochsangiz (yoki telefonga ko'chirsangiz) ilova
-to'liq ishlaydi.
+to'liq ishlaydi va **AI darhol ishlaydi** — kalit kiritish shart emas.
 
 | | |
 |---|---|
-| Fayl | `UZMED__.html` (58 MB) |
+| Fayl | `UZMED.html` (55.8 MB) |
+| AI kaliti | ✅ o'rnatilgan (Gemini + Groq) |
 | Ishlaydi | Chrome, Android WebView/APK, `file://` protokoli |
-| Internet | **shart emas** (faqat AI chat uchun kerak) |
+| Internet | faqat AI chat uchun; qolgan hamma narsa oflayn |
 
 > **Eslatma:** `Releases` bo'limidagi `v1.0` — **eski, tuzatilmagan** versiya.
-> Yangi tuzatishlar shu yerdagi `UZMED__.zip` da.
+> Yangi tuzatishlar shu yerdagi `UZMED.zip` da.
+
+Kalitsiz variant ham bor: [`UZMED__.zip`](../../raw/main/UZMED__.zip) — unda
+foydalanuvchi o'z kalitini kiritadi.
 
 ---
 
-## 🔑 AI ni yoqish
+## 🔑 AI kalitini almashtirish
 
-Ilovadagi AI chat ishlashi uchun o'z API kalitingiz kerak (fayl ichida kalit
-saqlanmaydi — bu ataylab shunday, sabab pastda).
+Kalit ishdan chiqsa yoki o'zingiznikini qo'ymoqchi bo'lsangiz —
+**Sozlamalar → AI API Key** bo'limiga kiriting, yoki brauzer konsolidan:
 
-**Sozlamalar → AI API Key** bo'limiga kalitni kiriting. Qo'llab-quvvatlanadi:
+```js
+UZMEDKeys.ornat('AQ.yangi-gemini-kaliti', 'gsk_yangi-groq-kaliti');
+UZMEDKeys.holat();   // tekshirish
+```
 
 | Provayder | Kalit ko'rinishi | Qayerdan olinadi |
 |---|---|---|
@@ -37,22 +44,14 @@ saqlanmaydi — bu ataylab shunday, sabab pastda).
 | Groq | `gsk_…` | [console.groq.com/keys](https://console.groq.com/keys) |
 | OpenAI | `sk-…` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 
-Yoki brauzer konsolidan:
+Faylni qayta yig'ish shart emas — kalit brauzer xotirasiga saqlanadi.
 
-```js
-UZMEDKeys.ornat('AQ.sizning-gemini-kalitingiz', 'gsk_sizning-groq-kalitingiz');
-UZMEDKeys.holat();   // tekshirish
-```
+### Model haqida
 
-### ⚠️ Nega kalit fayl ichida yo'q
-
-Oldingi versiyada API kalitlar HTML ichiga yozilgan edi (ba'zilari base64 bilan
-yashirilgan). Repo ommaviy bo'lgani uchun GitHub va provayderlar ularni
-**avtomatik bekor qilishdi** — natijada butun AI tizimi ishlamay qoldi.
-
-Shuning uchun endi kalitlar hech qachon repoga tushmaydi. Ular
-`patches/keys.local.json` faylidan build vaqtida qo'shiladi, u esa `.gitignore`
-da (faqat shaxsiy build uchun).
+Google `gemini-2.0-flash`, `gemini-2.5-flash` va `gemini-2.5-flash-lite`
+modellarini o'chirgan (HTTP 404). Ilova endi **`gemini-flash-latest`**
+taxallusidan foydalanadi — u Google tomonidan avtomatik yangilanadi, shuning
+uchun model eskirishi sababli AI yana to'xtab qolmaydi.
 
 ---
 
