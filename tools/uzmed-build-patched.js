@@ -27,7 +27,29 @@ if (!SRC || !OUT) {
 
 const ROOT = path.resolve(__dirname, '..');
 const prologue = fs.readFileSync(path.join(ROOT, 'patches', 'prologue.html'), 'utf8');
-const epilogue = fs.readFileSync(path.join(ROOT, 'patches', 'epilogue.html'), 'utf8');
+let epilogue = fs.readFileSync(path.join(ROOT, 'patches', 'epilogue.html'), 'utf8');
+
+/* ── API kalitlari ────────────────────────────────────────────────────────
+   Kalitlar `patches/keys.local.json` dan olinadi. Bu fayl .gitignore da —
+   ommaviy repoga HECH QACHON tushmaydi.
+
+   Nega shunday: oldingi versiyada Groq kaliti HTML ichiga base64 qilib
+   yozilgan edi. Repo ommaviy bo'lgani uchun Groq uni avtomatik bekor qildi
+   va butun AI tizimi ishlamay qoldi. Xuddi shu xato takrorlanmasligi kerak.
+
+   Fayl bo'lmasa — build kalitsiz yig'iladi va foydalanuvchi kalitni ilova
+   ichidagi Sozlamalar → AI API Key orqali kiritadi.                        */
+const KEYS_FILE = path.join(ROOT, 'patches', 'keys.local.json');
+let kalitHolat = 'kalitsiz (foydalanuvchi Sozlamalardan kiritadi)';
+if (fs.existsSync(KEYS_FILE)) {
+  const k = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
+  const g = String(k.gemini || '').trim();
+  const q = String(k.groq || '').trim();
+  if (g) epilogue = epilogue.replace('@@UZMED_GEMINI_KEY@@', g);
+  if (q) epilogue = epilogue.replace('@@UZMED_GROQ_KEY@@', q);
+  const niqob = (s) => s ? s.slice(0, 6) + '…' + s.slice(-4) : 'yo`q';
+  kalitHolat = 'o`rnatildi — Gemini: ' + niqob(g) + ' · Groq: ' + niqob(q);
+}
 
 const html = fs.readFileSync(SRC, 'utf8');
 
@@ -67,6 +89,7 @@ console.log('Natija:     ' + OUT + '  (' + (b.length / 1048576).toFixed(2) + ' M
 console.log('Prologue:   ' + prologue.length + ' belgi → tail boshiga (@' + tailStart + ')');
 console.log('Epilogue:   ' + epilogue.length + ' belgi → </body> oldiga (@' + bodyAt + ')');
 console.log('Qo`shildi:  +' + (b.length - a.length) + ' belgi');
+console.log('API kalit:  ' + kalitHolat);
 console.log('');
 console.log(butun
   ? '✅ ISBOT: asl faylning BARCHA baytlari o`z tartibida saqlangan (0 o`chirilgan, 0 o`zgartirilgan)'

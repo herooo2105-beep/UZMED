@@ -1,7 +1,7 @@
 {
   "globals": {
-    "window": "object:710",
-    "self": "object:710",
+    "window": "object:714",
+    "self": "object:714",
     "document": "object:2",
     "name": "string",
     "location": "object:14",
@@ -16,11 +16,11 @@
     "toolbar": "object:0",
     "status": "string",
     "closed": "boolean",
-    "frames": "object:710",
+    "frames": "object:714",
     "length": "number",
-    "top": "object:710",
+    "top": "object:714",
     "opener": "object",
-    "parent": "object:710",
+    "parent": "object:714",
     "frameElement": "object",
     "navigator": "object:0",
     "origin": "string",
@@ -51,7 +51,7 @@
     "crypto": "object:0",
     "indexedDB": "object:0",
     "sessionStorage": "object:0",
-    "localStorage": "object:8",
+    "localStorage": "object:9",
     "onbeforexrselect": "object",
     "onabort": "object",
     "onbeforeinput": "object",
@@ -480,6 +480,10 @@
     "uzmedEscAttr": "function",
     "UZMEDStorageKeys": "object:2",
     "UZMEDMkbAudit": "object:1",
+    "__UZMED_FIX_THEME_NIGHT__": "boolean",
+    "UZMEDNightMode": "object:1",
+    "__UZMED_FIX_AI_KEYS__": "boolean",
+    "UZMEDKeys": "object:4",
     "__resources": "object:0",
     "getAiTime": "function",
     "formatAiText": "function",
@@ -2383,6 +2387,7 @@
     "uzmed_ai_instruction",
     "uzmed_book_kb_v1",
     "uzmed_fix_audit_tarix_v1",
+    "uzmed_gemini_model",
     "uzmed_sec_banner_v1",
     "uzmed_theme"
   ],
@@ -2742,6 +2747,7 @@
     "uzmed-emoji-mask-icons",
     "uzmed-fix-aitabs-css",
     "uzmed-local-docs",
+    "uzmed-night-style",
     "uzmed-premium-2026",
     "uzmed-premium-3d",
     "uzmed-premium-3d-fx",
@@ -2823,5 +2829,5 @@
     "uzmed-tahlil-engine",
     "uzmed-tap-early"
   ],
-  "domNodeCount": 7700
+  "domNodeCount": 7701
 }

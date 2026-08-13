@@ -207,25 +207,28 @@
     catch (e) { return null; }
   }
 
-  // fetch ustidan yupqa qatlam: FAQAT RAG so'rovlariga tegishli
+  /* fetch ustidan KUZATUVCHI qatlam.
+     ⚠️ Bu blok HECH QANDAY so'rovni BLOKLAMAYDI. Oldingi versiyada standart
+     token bilan ketayotgan masofaviy RAG so'rovi rad etilardi; tibbiy ilovada
+     AI yo'lini to'sish xavfi kutilgan foydadan katta, shuning uchun endi
+     faqat ogohlantirish yoziladi va so'rov o'z yo'liga davom etadi. */
   var _fetch = window.fetch;
   if (typeof _fetch !== 'function') return;
+  var ogohlantirildi = false;
 
   window.fetch = function (url, opts) {
     try {
       var u = (typeof url === 'string') ? url : (url && url.url) || '';
       var rag = /\/api\/(health|search|ingest|rag)\b/.test(u);
-      if (rag && !mahalliymi(u) && !aniqToken()) {
-        // Masofaviy manzilga standart (ochiq ma'lum) tokenni YUBORMAYMIZ
+      if (rag && !mahalliymi(u) && !aniqToken() && !ogohlantirildi) {
         var h = (opts && opts.headers) || {};
-        var bor = false;
-        try {
-          for (var k in h) { if (/^authorization$/i.test(k) && String(h[k]).indexOf(STANDART) >= 0) bor = true; }
-        } catch (e) {}
-        if (bor) {
-          return Promise.reject(new Error(
-            'UZMED xavfsizlik: standart admin token faqat localhost uchun. ' +
-            'Masofaviy RAG manzili uchun UZMED_ADMIN_TOKEN ni sozlang.'));
+        for (var k in h) {
+          if (/^authorization$/i.test(k) && String(h[k]).indexOf(STANDART) >= 0) {
+            ogohlantirildi = true;
+            console.warn('[UZMED xavfsizlik] Standart admin token masofaviy manzilga ketyapti. ' +
+                         'UZMEDRagSecurity.tokenOrnat("...") bilan o`z tokeningizni qo`ying.');
+            break;
+          }
         }
       }
     } catch (e) {}
@@ -450,6 +453,384 @@
               'hisobotga tushishidan oldin shifokor tasdig`i talab qilinadi.'
       };
     }
+  };
+})();
+</script>
+
+<!-- ─── X-14 · Kun/Tun rejimi haqiqatan ishlamaydi
+         MUAMMO: ilovaning asosiy mavzusi allaqachon to'q ko'k (#0f172a).
+         Mavjud `body.dark-mode` qoidalari faqat shisha shaffofligini
+         .045 → .035 qiladi — o'lchandi: bodyBg kunduzgi va tungi holatda
+         BIR XIL rgb(15,23,42). Ya'ni tugma ishlaydi, natija ko'rinmaydi.
+
+         YECHIM: kunduzgi ko'rinish 0 % o'zgarmaydi. Tungi rejim uchun
+         haqiqiy palitra beriladi: qora fon, ko'k nurni kamaytirilgan
+         iliqroq matn, so'ngan yorug'lik. Bu tungi navbatdagi shifokor
+         uchun mo'ljallangan. Mavjud CSS o'chirilmaydi — ustidan yuqori
+         spetsifiklik bilan qoplanadi. ─── -->
+<script id="uzmed-fix-theme-night-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_FIX_THEME_NIGHT__) return;
+  window.__UZMED_FIX_THEME_NIGHT__ = true;
+
+  var CSS =
+  /* Tungi palitra — faqat body.dark-mode faol bo'lganda */
+  'html body.dark-mode{' +
+    '--page-grad:linear-gradient(165deg,#04060a 0%,#070a11 50%,#0a0f18 100%);' +
+    '--text:#e7e3da;--text2:#a29d93;--muted:#6f6b64;' +
+    '--bg:rgba(255,255,255,.028);--white:rgba(255,255,255,.045);' +
+    '--glass-strong:rgba(255,255,255,.065);' +
+    '--border:rgba(255,255,255,.075);' +
+    '--accent:#2f6fd0;--accent2:#4a53c4;--red:#2f6fd0;--red2:#4a53c4;' +
+    '--accent-grad:linear-gradient(135deg,#2f6fd0 0%,#4a53c4 100%);' +
+    '--blue:#4f8fe0;--green:#0e9d70;' +
+    '--shadow:0 6px 22px rgba(0,0,0,.55);' +
+    '--shadow-md:0 14px 40px rgba(0,0,0,.72);' +
+    '--uzp-glass:rgba(255,255,255,.04);' +
+    '--uzp-glass-2:rgba(255,255,255,.06);' +
+    '--uzp-glass-chrome:rgba(4,6,10,.82);' +
+    '--uzp-hair:rgba(255,255,255,.09);' +
+    '--uzp-hair-soft:rgba(255,255,255,.05);' +
+    '--uzp-accent:#2f6fd0;--uzp-accent2:#4a53c4;--uzp-accent3:#6d47b8;' +
+    '--uzp-cyan:#1a9fb5;' +
+    '--uzp-grad:linear-gradient(135deg,#2f6fd0 0%,#4a53c4 55%,#6d47b8 100%);' +
+    '--uzp-glow:0 0 0 1px rgba(74,83,196,.26), 0 8px 26px -8px rgba(47,111,208,.38);' +
+    '--uzp-glow-strong:0 0 0 1px rgba(74,83,196,.36), 0 14px 40px -10px rgba(47,111,208,.5);' +
+    '--uzad-ink:#e7e3da;--uzad-ink2:#9b968d;' +
+    '--uzad-hair:rgba(255,255,255,.075);--uzad-hair2:rgba(255,255,255,.045);' +
+    '--uzad-fill:rgba(255,255,255,.035);--uzad-fill2:rgba(255,255,255,.07);' +
+    '--uzad-acc:#2f6fd0;--uzad-acc2:#4a53c4;' +
+    'background:#04060a;color:#e7e3da;' +
+  '}' +
+  /* Sahifa foni gradientdan foydalanadigan joylar */
+  'html body.dark-mode,html body.dark-mode .app,html body.dark-mode #app,' +
+  'html body.dark-mode .screen,html body.dark-mode [id$="-screen"]{' +
+    'background-image:var(--page-grad);background-color:#04060a;' +
+  '}' +
+  /* Sarlavha va pastki navigatsiya — shaffof joylarni qoraytiramiz */
+  'html body.dark-mode header,html body.dark-mode .header,' +
+  'html body.dark-mode nav,html body.dark-mode .nav,html body.dark-mode .bottom-nav{' +
+    'background-color:rgba(4,6,10,.88);' +
+  '}' +
+  /* Oq fonli kartochkalar tungi rejimda ko'zni qamashtirmasin */
+  'html body.dark-mode .card,html body.dark-mode .panel,html body.dark-mode .modal{' +
+    'background-color:rgba(255,255,255,.035);' +
+  '}' +
+  /* Ekranlar konteyneri — ko'k gradient shu yerdan kelardi */
+  'html body.dark-mode #screens,html body.dark-mode .screens{' +
+    'background-color:#04060a;background-image:none;' +
+  '}' +
+  /* FAQAT bezak kanvaslari so'ndiriladi.
+     ⚠️ DICOM ko'ruvchi (.udv-cv) va derma atlas suratlariga TEGILMAYDI —
+     klinik tasvirning yorqinligini o'zgartirish tashxisga ta'sir qilishi mumkin. */
+  'html body.dark-mode #uzp-dna-canvas,html body.dark-mode #uzp-ai-model{' +
+    'opacity:.30;' +
+  '}' +
+  /* Klinik tasvirlar himoyasi — hech qanday filtr qo'llanmasligi kafolati */
+  'html body.dark-mode canvas.udv-cv,html body.dark-mode #udv-cv,' +
+  'html body.dark-mode .derma-img,html body.dark-mode [data-derma] img{' +
+    'filter:none !important;opacity:1 !important;' +
+  '}' +
+  '';
+
+  /* ── OQ KARTOCHKALAR ────────────────────────────────────────────────
+     Ilovaning asosiy kartochkalari oq (rgba(255,255,255,.86)) va matni to'q.
+     Tungi rejimda ular ko'zni qamashtiradi.
+
+     SPETSIFIKLIK MUAMMOSI: premium qatlam `#assosi-screen .proto-group`
+     ko'rinishidagi ID li selektorlardan foydalanadi (1-1-0). Oddiy
+     `body.dark-mode .proto-group` (0-2-2) ulardan past turadi va qoida
+     qo'llanmaydi — o'lchab tasdiqlandi. Shuning uchun selektorlar barcha
+     ekranlarni o'rab turuvchi `#screens` konteyneri bilan kuchaytiriladi. */
+  var KARTA = ['.tashxis-tiny', '.tashxis-subhead', '.tashxis-subcount',
+    '.proto-result-item', '.proto-group', '.proto-chip', '.proto-group-count',
+    '.proto-group-chevron', '.proto-stat', '.cat-item', '.cat-arrow',
+    '.proto-group-head'];
+
+  function sel(list, oldi, keyin) {
+    return list.map(function (c) { return oldi + c + (keyin || ''); }).join(',');
+  }
+
+  /* Ekran konteynerlarining HAQIQIY id lari (masalan `assosi-screen`).
+     Ular runtime'da o'qiladi — qattiq yozilgan ro'yxatga tayanmaymiz. */
+  function ekranIdlari() {
+    var r = [];
+    try {
+      var els = document.querySelectorAll('[id$="-screen"]');
+      for (var i = 0; i < els.length; i++) if (els[i].id) r.push(els[i].id);
+    } catch (e) {}
+    return r;
+  }
+
+  /* Har bir ekran id si bilan selektor yasaymiz — ID hisobi 1 ga chiqadi va
+     ilovaning `#assosi-screen .proto-group` (1-1-0) qoidalaridan ustun turadi.
+     Qo'shimcha ravishda id siz zaxira variant ham qo'shiladi. */
+  function ikki(list, keyin) {
+    var ids = ekranIdlari();
+    var qism = [];
+    for (var i = 0; i < ids.length; i++) {
+      qism.push(sel(list, 'html body.dark-mode #' + ids[i] + ' ', keyin));
+    }
+    qism.push(sel(list, 'html body.dark-mode ', keyin));
+    return qism.join(',');
+  }
+
+  /* Kartochka qoidalari ekran id lariga bog'liq, ekranlar esa bundler
+     shablonni dekodlagandan keyin paydo bo'ladi — shuning uchun CSS
+     har safar qaytadan quriladi, bir marta emas. */
+  function kartaCSS() {
+    return ikki(KARTA) + '{' +
+      'background-color:rgba(255,255,255,.07) !important;' +
+      'background-image:none !important;' +
+      'border-color:rgba(255,255,255,.10) !important;' +
+      'color:#e7e3da !important;' +
+    '}' +
+    /* Ichkaridagi to'q matnlar ham yorug'ga o'tadi — aks holda to'q ustida to'q qolardi */
+    ikki(['.tashxis-tiny', '.proto-result-item', '.proto-group', '.cat-item',
+          '.proto-stat', '.tashxis-subhead'], ' *') + '{color:#e7e3da !important}';
+  }
+
+  /* ── XAVFLILIK TEGLARI ──────────────────────────────────────────────
+     Rang MA'NOSI saqlanadi (ko'k = o'rta, sariq = og'ir, qizil = kritik) —
+     faqat fon qoraytirilib, matn shu ohangda yorug' qilinadi. Shifokor
+     xavflilik darajasini rangdan o'qiy olishi shart. */
+  var TEG = [
+    [['.tag-sev-moderate'], 'rgba(59,130,246,.20)', '#93c5fd'],
+    [['.tag-sev-severe', '.sec-badge'], 'rgba(217,119,6,.22)', '#fcd34d'],
+    [['.tag-sev-critical', '.derma-tag', '.priv-purpose-num'], 'rgba(220,38,38,.22)', '#fca5a5'],
+    [['.priv-contact-icon', '.uzi8', '.uzi10'], 'rgba(96,165,250,.20)', '#93c5fd']
+  ];
+  function tegCSS() {
+    var s = '';
+    TEG.forEach(function (t) {
+      s += ikki(t[0]) + '{background:' + t[1] + ' !important;color:' + t[2] + ' !important}';
+    });
+    return s;
+  }
+
+  function toliqCSS() { return CSS + kartaCSS() + tegCSS(); }
+
+  /* Bundler shablonni dekodlab, hujjat mazmunini qayta quradi va shu paytda
+     bizning <style> elementimiz o'chib ketishi mumkin (o'lchandi: 13 s dan
+     keyin element yo'q edi). Shuning uchun mavjudligi doimiy nazorat qilinadi. */
+  var oxirgiImzo = null;               // ekran id lari to'plamining imzosi
+
+  function qoy() {
+    var host = document.head || document.documentElement;
+    if (!host) return false;
+    var imzo = ekranIdlari().join(',');
+    var s = document.getElementById('uzmed-night-style');
+    if (s && s.isConnected && imzo === oxirgiImzo) return true;   // o'zgarish yo'q
+    if (!s || !s.isConnected) {
+      s = document.createElement('style');
+      s.id = 'uzmed-night-style';
+      host.appendChild(s);             // oxirida turadi → kaskadda ustun
+    }
+    s.textContent = toliqCSS();        // ekranlar paydo bo'lgach qayta quriladi
+    oxirgiImzo = imzo;
+    return true;
+  }
+
+  /* Dastlabki 90 soniya davomida qo'riqlaymiz, keyin to'xtaymiz (leak yo'q). */
+  var tik = 0;
+  var qorovul = setInterval(function () {
+    qoy();
+    if (++tik > 225) clearInterval(qorovul);   // 225 × 400 ms = 90 s
+  }, 400);
+  qoy();
+
+  /* Har safar mavzu almashtirilganda stil borligiga kafolat beramiz. */
+  var _toggle = window.toggleTheme;
+  if (typeof _toggle === 'function') {
+    window.toggleTheme = function () {
+      var r;
+      try { r = _toggle.apply(this, arguments); } catch (e) { /* asl xatti-harakat saqlanadi */ }
+      qoy();
+      return r;
+    };
+  }
+
+  /* Saqlangan tanlovni tiklash: ilova `uzmed_theme` ni o'qiydi, lekin
+     ba'zi holatda body klassi kech qo'yiladi — mos holatga keltiramiz. */
+  function sinxron() {
+    try {
+      var t = localStorage.getItem('uzmed_theme');
+      if (t === 'dark' && document.body && !document.body.classList.contains('dark-mode')) {
+        document.body.classList.add('dark-mode');
+      }
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', sinxron);
+  } else { sinxron(); }
+  setTimeout(sinxron, 1200);
+
+  window.UZMEDNightMode = {
+    holat: function () {
+      var d = !!(document.body && document.body.classList.contains('dark-mode'));
+      var bg = '';
+      try { bg = getComputedStyle(document.body).backgroundColor; } catch (e) {}
+      return { tungi: d, fon: bg, stilQoyildi: !!document.getElementById('uzmed-night-style') };
+    }
+  };
+})();
+</script>
+
+<!-- ─── X-15 · AI tizimi ishlamaydi: kalit + eskirgan model
+     ANIQLANGAN IKKI SABAB (2026-08-13, haqiqiy so'rov bilan tekshirilgan):
+
+     1) Faylga base64 ko'rinishida Groq kaliti o'rnatilgan edi
+        (uzmed-online bloki, _EK). Repo OMMAVIY bo'lgani uchun Groq uni
+        avtomatik bekor qilgan → 401/403.
+
+     2) Ilova chaqiradigan Gemini modellari Google tomonidan olib tashlangan:
+          gemini-2.0-flash      → 404 "no longer available"
+          gemini-2.5-flash      → 404 "no longer available to new users"
+          gemini-2.5-flash-lite → 404 "no longer available to new users"
+          gemini-flash-latest   → 200 ✅ (yagona ishlaydigani)
+        Ya'ni kalit to'g'ri bo'lsa ham so'rov 404 bilan qaytardi.
+
+     TUZATISH: kalitlar localStorage'ga joylanadi va fetch darajasida
+     eskirgan model nomi `gemini-flash-latest` ga almashtiriladi. Bu taxallus
+     Google tomonidan avtomatik yangilanadi — kelajakda yana buzilmaydi.
+
+     ⚠️ Kalitlar bu faylga BUILD VAQTIDA qo'shiladi (patches/keys.local.json,
+        git'ga tushmaydi). Ommaviy repodagi nusxada kalit bo'lmaydi — aks holda
+        u yana avtomatik bekor qilinadi. ─── -->
+<script id="uzmed-fix-ai-keys-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_FIX_AI_KEYS__) return;
+  window.__UZMED_FIX_AI_KEYS__ = true;
+
+  /* Build vaqtida almashtiriladigan o'rinbosarlar. Almashtirilmasa — bo'sh. */
+  var GEMINI_RAW = '@@UZMED_GEMINI_KEY@@';
+  var GROQ_RAW = '@@UZMED_GROQ_KEY@@';
+  function haqiqiy(v) { return (v && v.charAt(0) !== '@') ? v : ''; }
+
+  /* 2026-08-13 da tekshirilgan: yagona ishlaydigan taxallus */
+  var MODEL = 'gemini-flash-latest';
+  /* Google olib tashlagan model oilalari */
+  var ESKI = /^gemini-(?:1\.5|2\.0|2\.5)[\w.\-]*$|^gemini-pro$/;
+
+  function oqi(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function yoz(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  function kalitGemini() { return haqiqiy(GEMINI_RAW) || oqi('UZMED_GEMINI_KEY'); }
+  function kalitGroq() { return haqiqiy(GROQ_RAW) || oqi('UZMED_GROQ_KEY') || oqi('uzmed_ai_key'); }
+
+  /* ── Kalitlarni ilova o'qiydigan joylarga ekamiz ──────────────────────
+     Ilovaning findKey() funksiyasi faqat ^(gsk_|AIza|sk-) formatini qabul
+     qiladi, shuning uchun Groq kaliti `uzmed_ai_key` ga yoziladi — u yerdan
+     provayder to'g'ri aniqlanadi. Gemini kaliti alohida nomda saqlanadi. */
+  function ek() {
+    var g = haqiqiy(GEMINI_RAW), q = haqiqiy(GROQ_RAW);
+    if (q) { if (!oqi('uzmed_ai_key')) yoz('uzmed_ai_key', q); if (!oqi('UZMED_GROQ_KEY')) yoz('UZMED_GROQ_KEY', q); }
+    if (g && !oqi('UZMED_GEMINI_KEY')) yoz('UZMED_GEMINI_KEY', g);
+    /* Eskirgan model saqlangan bo'lsa — majburan yangilaymiz */
+    var m = oqi('uzmed_gemini_model');
+    if (!m || ESKI.test(m)) yoz('uzmed_gemini_model', MODEL);
+  }
+  ek();
+
+  /* ── fetch darajasida tuzatish ───────────────────────────────────────
+     Model nomlari ilovaning bir necha blokida qattiq yozilgan va ular
+     shablon ichida — tahrirlab bo'lmaydi. Shuning uchun so'rov ketayotganda
+     almashtiriladi: bitta joyda hammasi tuzaladi. */
+  var _fetch = window.fetch;
+  if (typeof _fetch !== 'function') return;
+
+  function bosh(h) {                       // headers'ni oddiy obyektga keltiramiz
+    var r = {};
+    try {
+      if (!h) return r;
+      if (typeof Headers !== 'undefined' && h instanceof Headers) { h.forEach(function (v, k) { r[k] = v; }); return r; }
+      if (Array.isArray(h)) { h.forEach(function (p) { r[p[0]] = p[1]; }); return r; }
+      for (var k in h) r[k] = h[k];
+    } catch (e) {}
+    return r;
+  }
+
+  window.fetch = function (url, opts) {
+    try {
+      if (typeof url === 'string') {
+        /* ── Gemini ── */
+        if (url.indexOf('generativelanguage.googleapis.com') >= 0) {
+          var yangi = url.replace(/models\/([^:/?]+):/, function (all, m) {
+            return ESKI.test(m) ? 'models/' + MODEL + ':' : all;
+          });
+          var g = kalitGemini();
+          if (g) {
+            /* Faylda ESKI, bekor qilingan kalit ham bor
+               (UZMED_DEFAULT_GEMINI_KEY va base64 _EK). Shuning uchun
+               mavjud key= ni tekshirmasdan qo'shish yetarli emas —
+               boshqa kalit bo'lsa, u ALMASHTIRILADI. */
+            if (/[?&]key=[^&]/.test(yangi)) {
+              yangi = yangi.replace(/([?&]key=)[^&]*/, function (all, oldi) {
+                return oldi + encodeURIComponent(g);
+              });
+            } else {
+              var h0 = bosh(opts && opts.headers);
+              var bor = false;
+              for (var k0 in h0) if (/^x-goog-api-key$/i.test(k0)) bor = true;
+              if (!bor) yangi += (yangi.indexOf('?') < 0 ? '?' : '&') + 'key=' + encodeURIComponent(g);
+              else {
+                /* x-goog-api-key sarlavhasi ham yangilanadi */
+                var o2 = {}; var s2 = opts || {};
+                for (var kx in s2) o2[kx] = s2[kx];
+                for (var ky in h0) if (/^x-goog-api-key$/i.test(ky)) h0[ky] = g;
+                o2.headers = h0; arguments[1] = o2;
+              }
+            }
+          }
+          if (yangi !== url) { arguments[0] = yangi; }
+        }
+        /* ── Groq ── */
+        else if (url.indexOf('api.groq.com') >= 0) {
+          var q = kalitGroq();
+          if (q) {
+            var o = {}; var src = opts || {};
+            for (var kk in src) o[kk] = src[kk];
+            var hh = bosh(src.headers);
+            var auth = '';
+            for (var k1 in hh) if (/^authorization$/i.test(k1)) auth = String(hh[k1] || '');
+            /* Faqat "gsk_ bilan boshlanadimi" degan tekshiruv YETARLI EMAS —
+               faylda ESKI, bekor qilingan gsk_ kaliti ham bor. Shuning uchun
+               sarlavha ayni bizning kalitimiz bo'lmasa, almashtiriladi. */
+            if (auth.indexOf(q) < 0) {
+              for (var k2 in hh) if (/^authorization$/i.test(k2)) delete hh[k2];
+              hh.Authorization = 'Bearer ' + q;
+              o.headers = hh;
+              arguments[1] = o;
+            }
+          }
+        }
+      }
+    } catch (e) {}
+    return _fetch.apply(this, arguments);
+  };
+
+  /* ── Ommaviy API: kalitni keyin almashtirish uchun ── */
+  window.UZMEDKeys = {
+    holat: function () {
+      var g = kalitGemini(), q = kalitGroq();
+      function niqob(k) { return k ? (k.slice(0, 6) + '…' + k.slice(-4) + ' (' + k.length + ')') : 'yo`q'; }
+      return { gemini: niqob(g), groq: niqob(q), model: oqi('uzmed_gemini_model') || MODEL };
+    },
+    ornat: function (gemini, groq) {
+      if (gemini) yoz('UZMED_GEMINI_KEY', String(gemini).trim());
+      if (groq) { yoz('UZMED_GROQ_KEY', String(groq).trim()); yoz('uzmed_ai_key', String(groq).trim()); }
+      yoz('uzmed_gemini_model', MODEL);
+      return this.holat();
+    },
+    tozala: function () {
+      ['UZMED_GEMINI_KEY', 'UZMED_GROQ_KEY', 'uzmed_ai_key'].forEach(function (k) {
+        try { localStorage.removeItem(k); } catch (e) {}
+      });
+      return 'kalitlar o`chirildi';
+    },
+    model: MODEL
   };
 })();
 </script>
