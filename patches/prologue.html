@@ -1,0 +1,119 @@
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     UZMED FIX PROLOGUE · 2026-08-13
+     Joylashuvi: OUTER TAIL ning ENG BOSHI (template'dan keyin, birinchi
+     tail blokdan oldin). Sabab: X-05/X-06/X-07 xatolarining ildizi shundaki,
+     doimiy setInterval / MutationObserver / requestAnimationFrame lar tail
+     modullarining YOPIQ (closure) doirasida ro'yxatdan o'tadi va tashqaridan
+     to'xtatib bo'lmaydi. Ularni nazorat qilishning yagona additive yo'li —
+     ular ro'yxatdan o'tishidan OLDIN registratorni o'rnatish.
+
+     KAFOLAT: bu blok hech qanday xatti-harakatni O'ZGARTIRMAYDI. U faqat
+     ro'yxatga oladi. Pauza/tiklash mantiqi tail oxiridagi bloklarda va
+     faqat aniq shartlarda (sahifa ko'rinmayapti / foydalanuvchi harakatsiz)
+     ishlaydi. Har bir o'ram original funksiyani chaqiradi va uning
+     qaytargan qiymatini o'zgartirmasdan uzatadi.
+     ════════════════════════════════════════════════════════════════════════ -->
+<script id="uzmed-fix-prologue-registry-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_FIX_PROLOGUE__) return;
+  window.__UZMED_FIX_PROLOGUE__ = true;
+
+  var NS = window.UZMEDCtl = {
+    intervals: [],      // { id, ms, live, paused }
+    observers: [],      // { obs, live }
+    rafMode: 'normal',  // normal | throttled
+    stats: { rafCalls: 0, rafThrottled: 0 }
+  };
+
+  /* ── setInterval registri ─────────────────────────────────────────────
+     Faqat ro'yxatga olinadi. clearInterval ham o'raladi, chunki modul
+     o'zini to'xtatganda registrni yangilash kerak.                        */
+  var _setInterval = window.setInterval;
+  var _clearInterval = window.clearInterval;
+
+  window.setInterval = function (fn, ms) {
+    var id = _setInterval.apply(window, arguments);
+    try {
+      NS.intervals.push({ id: id, ms: +ms || 0, fn: fn, live: true, paused: false });
+    } catch (e) {}
+    return id;
+  };
+  window.clearInterval = function (id) {
+    try {
+      for (var i = 0; i < NS.intervals.length; i++) {
+        if (NS.intervals[i].id === id) { NS.intervals[i].live = false; break; }
+      }
+    } catch (e) {}
+    return _clearInterval.apply(window, arguments);
+  };
+  /* MUHIM: native funksiyalar `window` ga bog'lanadi. Aks holda ularni
+     `UZMEDCtl._setInterval(...)` ko'rinishida chaqirganda `this` = UZMEDCtl
+     bo'lib qoladi va brauzer "Illegal invocation" xatosini beradi. */
+  NS._setInterval = _setInterval.bind(window);
+  NS._clearInterval = _clearInterval.bind(window);
+
+  /* ── MutationObserver registri ───────────────────────────────────────── */
+  var _MO = window.MutationObserver;
+  if (typeof _MO === 'function') {
+    function UzMutationObserver(cb) {
+      var o = new _MO(cb);
+      try { NS.observers.push({ obs: o, live: true }); } catch (e) {}
+      var _disc = o.disconnect.bind(o);
+      o.disconnect = function () {
+        try {
+          for (var i = 0; i < NS.observers.length; i++) {
+            if (NS.observers[i].obs === o) { NS.observers[i].live = false; break; }
+          }
+        } catch (e) {}
+        return _disc();
+      };
+      return o;
+    }
+    UzMutationObserver.prototype = _MO.prototype;
+    window.MutationObserver = UzMutationObserver;
+    NS._MutationObserver = _MO;
+  }
+
+  /* ── requestAnimationFrame nazorati ───────────────────────────────────
+     'normal' rejimda 1:1 original chaqiriladi — hech qanday farq yo'q.
+     'throttled' rejimda callback rAF o'rniga ~15 fps taymerga o'tkaziladi.
+     Rejimni faqat tail oxiridagi idle-boshqaruvchi o'zgartiradi.          */
+  var _raf = window.requestAnimationFrame;
+  var _caf = window.cancelAnimationFrame;
+  if (typeof _raf === 'function') {
+    window.requestAnimationFrame = function (cb) {
+      NS.stats.rafCalls++;
+      if (NS.rafMode === 'throttled') {
+        NS.stats.rafThrottled++;
+        // Manfiy id — cancelAnimationFrame bilan chalkashmasligi uchun
+        var t = window.setTimeout(function () {
+          try { cb(performance.now()); } catch (e) {}
+        }, 66);
+        return -t;
+      }
+      return _raf.call(window, cb);
+    };
+    window.cancelAnimationFrame = function (id) {
+      if (typeof id === 'number' && id < 0) { return window.clearTimeout(-id); }
+      return _caf.call(window, id);
+    };
+    NS._raf = _raf.bind(window);
+  }
+
+  /* ── Hisobot ──────────────────────────────────────────────────────────── */
+  NS.report = function () {
+    var live = NS.intervals.filter(function (t) { return t.live; });
+    return {
+      intervalJami: NS.intervals.length,
+      intervalTirik: live.length,
+      intervalTirikMs: live.map(function (t) { return t.ms; }).sort(function (a, b) { return a - b; }),
+      observerJami: NS.observers.length,
+      observerTirik: NS.observers.filter(function (o) { return o.live; }).length,
+      rafRejim: NS.rafMode,
+      raf: NS.stats
+    };
+  };
+})();
+</script>

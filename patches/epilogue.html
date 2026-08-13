@@ -1,0 +1,455 @@
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     UZMED FIX EPILOGUE · 2026-08-13 · </body> dan oldin
+     Har blok bitta xatoni tuzatadi. Barchasi ADDITIVE: mavjud kod, ma'lumot,
+     funksiya yoki API sozlamasi o'chirilmaydi va o'zgartirilmaydi.
+     ════════════════════════════════════════════════════════════════════════ -->
+
+<!-- ─── X-05 / X-06 / X-07 · quvvat sarfi: bo'sh turganda animatsiya va
+         taymerlarni pasaytirish. Prologue registridan foydalanadi. ─── -->
+<script id="uzmed-fix-idle-power-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_FIX_IDLE_POWER__) return;
+  window.__UZMED_FIX_IDLE_POWER__ = true;
+  var CTL = window.UZMEDCtl;
+  if (!CTL) return;                       // prologue yo'q bo'lsa — hech narsa qilinmaydi
+
+  var IDLE_MS = 25000;                    // 25 s harakatsizlikdan keyin
+  var son = Date.now();
+  var throttled = false;
+
+  function ochirilganmi() {
+    try { return localStorage.getItem('UZMED_IDLE_POWER') === 'off'; } catch (e) { return false; }
+  }
+
+  function pasaytir() {
+    if (throttled || ochirilganmi()) return;
+    throttled = true;
+    CTL.rafMode = 'throttled';            // rAF ~15 fps ga tushadi
+    // Faqat TEZ (≤2 s) va tirik intervallarni pauza qilamiz — sekinlari
+    // (health-check, autosave) o'z ishini davom ettiradi.
+    CTL.intervals.forEach(function (t) {
+      if (!t.live || t.paused || !t.ms || t.ms > 2000) return;
+      try { CTL._clearInterval(t.id); t.paused = true; } catch (e) {}
+    });
+  }
+
+  function tikla() {
+    if (!throttled) return;
+    throttled = false;
+    CTL.rafMode = 'normal';
+    CTL.intervals.forEach(function (t) {
+      if (!t.paused) return;
+      try {
+        var yangi = CTL._setInterval(t.fn, t.ms);   // ayni funksiya, ayni kechikish
+        t.id = yangi; t.paused = false;
+      } catch (e) {}
+    });
+  }
+
+  function harakat() { son = Date.now(); if (throttled) tikla(); }
+
+  ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'].forEach(function (ev) {
+    try { window.addEventListener(ev, harakat, { passive: true, capture: true }); } catch (e) {}
+  });
+  try {
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) pasaytir(); else harakat();
+    });
+  } catch (e) {}
+
+  CTL._idleTimer = CTL._setInterval(function () {
+    if (document.hidden || (Date.now() - son) > IDLE_MS) pasaytir();
+  }, 5000);
+
+  window.UZMEDIdlePower = {
+    holat: function () { return { pasaytirilgan: throttled, ochirilgan: ochirilganmi(), idleMs: IDLE_MS }; },
+    yoq: function () { try { localStorage.setItem('UZMED_IDLE_POWER', 'on'); } catch (e) {} tikla(); },
+    ochir: function () { try { localStorage.setItem('UZMED_IDLE_POWER', 'off'); } catch (e) {} tikla(); }
+  };
+})();
+</script>
+
+<!-- ─── X-09 · Smart Search'dan dori monografiyasini ochish ─── -->
+<script id="uzmed-fix-drugmodal-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_FIX_DRUGMODAL__) return;
+  window.__UZMED_FIX_DRUGMODAL__ = true;
+  if (typeof window.openDrugModal === 'function') return;   // allaqachon bor bo'lsa — tegilmaydi
+
+  var MAYDONLAR = [
+    ['shakl', 'Chiqarilish shakli'],
+    ['korsatmalar', "Ko'rsatmalar"],
+    ['dozalash', 'Dozalash'],
+    ['qarshi', "Qarshi ko'rsatmalar"],
+    ['yon', "Yon ta'sirlari"],
+    ['talsiruvi', "Dori o'zaro ta'siri"]
+  ];
+
+  function topDori(kalit) {
+    var db = window.FULL_DRUG_DB;
+    if (!db || !kalit) return null;
+    if (db[kalit]) return db[kalit];
+    var pas = String(kalit).toLowerCase();
+    if (db[pas]) return db[pas];
+    var k = Object.keys(db);
+    for (var i = 0; i < k.length; i++) {
+      var r = db[k[i]];
+      if (r && String(r.name || '').toLowerCase() === pas) return r;
+    }
+    return null;
+  }
+
+  function stil() {
+    if (document.getElementById('uzm-dm-style')) return;
+    var s = document.createElement('style');
+    s.id = 'uzm-dm-style';
+    s.textContent =
+      '.uzm-dm-bg{position:fixed;inset:0;background:rgba(4,10,16,.62);z-index:99998;' +
+      'display:flex;align-items:flex-end;justify-content:center}' +
+      '.uzm-dm{background:var(--card,#fff);color:var(--text,#0f172a);width:100%;max-width:640px;' +
+      'max-height:88vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:20px 20px 30px;' +
+      'box-shadow:0 -8px 40px rgba(0,0,0,.34)}' +
+      '@media(min-width:680px){.uzm-dm-bg{align-items:center}.uzm-dm{border-radius:16px}}' +
+      '.uzm-dm-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:6px}' +
+      '.uzm-dm-nom{font-size:19px;font-weight:700;line-height:1.3;flex:1}' +
+      '.uzm-dm-x{border:0;background:var(--chip,#eef2f6);color:inherit;width:32px;height:32px;' +
+      'border-radius:9px;font-size:18px;cursor:pointer;flex:none;line-height:1}' +
+      '.uzm-dm-sec{margin-top:14px}' +
+      '.uzm-dm-lab{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;' +
+      'color:var(--muted,#64748b);margin-bottom:4px}' +
+      '.uzm-dm-val{font-size:14.5px;line-height:1.62;white-space:pre-wrap}' +
+      '.uzm-dm-yoq{font-size:13px;color:var(--muted,#64748b);font-style:italic}';
+    document.head.appendChild(s);
+  }
+
+  function yop() {
+    var bg = document.getElementById('uzm-dm-bg');
+    if (bg && bg.parentNode) bg.parentNode.removeChild(bg);
+    document.removeEventListener('keydown', esc);
+  }
+  function esc(e) { if (e.key === 'Escape') yop(); }
+
+  window.openDrugModal = function (kalit) {
+    try {
+      var d = topDori(kalit);
+      if (!d) { if (window.toast) window.toast('Dori topilmadi: ' + kalit); return false; }
+      stil(); yop();
+
+      var bg = document.createElement('div');
+      bg.className = 'uzm-dm-bg'; bg.id = 'uzm-dm-bg';
+      bg.addEventListener('click', function (e) { if (e.target === bg) yop(); });
+
+      var box = document.createElement('div');
+      box.className = 'uzm-dm';
+
+      var top = document.createElement('div');
+      top.className = 'uzm-dm-top';
+      var nom = document.createElement('div');
+      nom.className = 'uzm-dm-nom';
+      nom.textContent = d.name || String(kalit);       // textContent — XSS yo'q
+      var x = document.createElement('button');
+      x.className = 'uzm-dm-x'; x.type = 'button';
+      x.setAttribute('aria-label', 'Yopish');
+      x.textContent = '✕';
+      x.addEventListener('click', yop);
+      top.appendChild(nom); top.appendChild(x);
+      box.appendChild(top);
+
+      var bor = 0;
+      MAYDONLAR.forEach(function (p) {
+        var v = d[p[0]];
+        if (v == null || !String(v).trim()) return;
+        bor++;
+        var sec = document.createElement('div'); sec.className = 'uzm-dm-sec';
+        var lab = document.createElement('div'); lab.className = 'uzm-dm-lab'; lab.textContent = p[1];
+        var val = document.createElement('div'); val.className = 'uzm-dm-val';
+        val.textContent = String(v).replace(/<[^>]*>/g, '').trim();
+        sec.appendChild(lab); sec.appendChild(val); box.appendChild(sec);
+      });
+      if (!bor) {
+        var e0 = document.createElement('div');
+        e0.className = 'uzm-dm-yoq';
+        e0.textContent = "Bu yozuv uchun tafsilot kiritilmagan.";
+        box.appendChild(e0);
+      }
+
+      bg.appendChild(box);
+      document.body.appendChild(bg);
+      document.addEventListener('keydown', esc);
+      try { x.focus(); } catch (e) {}
+      return true;
+    } catch (e) {
+      if (window.toast) window.toast('Modalni ochib bo`lmadi');
+      return false;
+    }
+  };
+  window.closeDrugModal = yop;
+})();
+</script>
+
+<!-- ─── X-02 / X-08 · RAG: standart tokenni va localhost so'rovlarini cheklash ─── -->
+<script id="uzmed-fix-rag-token-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_FIX_RAG_TOKEN__) return;
+  window.__UZMED_FIX_RAG_TOKEN__ = true;
+
+  var STANDART = 'uzmed-admin-2026';
+
+  function mahalliymi(u) {
+    return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(String(u || ''));
+  }
+  function aniqToken() {
+    try { var t = localStorage.getItem('UZMED_ADMIN_TOKEN'); return t && t.trim() ? t : null; }
+    catch (e) { return null; }
+  }
+
+  // fetch ustidan yupqa qatlam: FAQAT RAG so'rovlariga tegishli
+  var _fetch = window.fetch;
+  if (typeof _fetch !== 'function') return;
+
+  window.fetch = function (url, opts) {
+    try {
+      var u = (typeof url === 'string') ? url : (url && url.url) || '';
+      var rag = /\/api\/(health|search|ingest|rag)\b/.test(u);
+      if (rag && !mahalliymi(u) && !aniqToken()) {
+        // Masofaviy manzilga standart (ochiq ma'lum) tokenni YUBORMAYMIZ
+        var h = (opts && opts.headers) || {};
+        var bor = false;
+        try {
+          for (var k in h) { if (/^authorization$/i.test(k) && String(h[k]).indexOf(STANDART) >= 0) bor = true; }
+        } catch (e) {}
+        if (bor) {
+          return Promise.reject(new Error(
+            'UZMED xavfsizlik: standart admin token faqat localhost uchun. ' +
+            'Masofaviy RAG manzili uchun UZMED_ADMIN_TOKEN ni sozlang.'));
+        }
+      }
+    } catch (e) {}
+    return _fetch.apply(this, arguments);
+  };
+
+  window.UZMEDRagSecurity = {
+    tokenSozlangan: function () { return !!aniqToken(); },
+    tokenOrnat: function (t) {
+      try { localStorage.setItem('UZMED_ADMIN_TOKEN', String(t || '').trim()); return true; }
+      catch (e) { return false; }
+    },
+    holat: function () {
+      var b = 'yo`q';
+      try { b = (window.uzmedRag && window.uzmedRag.getBase && window.uzmedRag.getBase()) || 'yo`q'; } catch (e) {}
+      return { manzil: b, mahalliy: mahalliymi(b), maxsusToken: !!aniqToken() };
+    }
+  };
+})();
+</script>
+
+<!-- ─── X-04 · AI/tahlil so'rovi yiqilganda foydalanuvchiga tushunarli xabar ─── -->
+<script id="uzmed-fix-ai-feedback-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_FIX_AI_FEEDBACK__) return;
+  window.__UZMED_FIX_AI_FEEDBACK__ = true;
+
+  var oxirgi = 0;
+  function xabar(m) {
+    var hozir = Date.now();
+    if (hozir - oxirgi < 4000) return;      // toast yomg'irining oldini olamiz
+    oxirgi = hozir;
+    try { if (window.toast) window.toast(m); else console.warn('[UZMED]', m); }
+    catch (e) {}
+  }
+
+  function matn(sabab) {
+    var s = String((sabab && (sabab.message || sabab)) || '');
+    if (/Failed to fetch|NetworkError|ERR_INTERNET|ERR_NAME|ERR_CONNECTION/i.test(s)) {
+      return navigator.onLine === false
+        ? 'Internet yo`q — AI javobi olinmadi. Oflayn bo`limlar ishlaydi.'
+        : 'Serverga ulanib bo`lmadi. Keyinroq qayta urinib ko`ring.';
+    }
+    if (/abort/i.test(s)) return 'So`rov bekor qilindi.';
+    if (/timeout|vaqt/i.test(s)) return 'So`rov vaqti tugadi. Qayta urinib ko`ring.';
+    if (/xavfsizlik/i.test(s)) return s;
+    return 'So`rov bajarilmadi: ' + s.slice(0, 90);
+  }
+
+  try {
+    window.addEventListener('unhandledrejection', function (e) {
+      // Mavjud uzmed-fix-global-error-net-v1 xatoni yozib oladi;
+      // bu blok faqat FOYDALANUVCHIGA ko'rinadigan xabar qo'shadi.
+      xabar(matn(e && e.reason));
+    });
+  } catch (e) {}
+
+  window.UZMEDAiFeedback = { xabar: xabar, matn: matn };
+})();
+</script>
+
+<!-- ─── X-03 · DDI offline qamrovi haqida ogohlantirish
+         MUHIM: bu blok BIRORTA ham yangi dori o'zaro ta'siri QO'SHMAYDI.
+         Klinik ma'lumot taxmin bilan yoki AI tomonidan yaratilmaydi.
+         Faqat mavjud qamrovni o'lchaydi va shifokorni ogohlantiradi. ─── -->
+<script id="uzmed-fix-ddi-notice-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_FIX_DDI_NOTICE__) return;
+  window.__UZMED_FIX_DDI_NOTICE__ = true;
+
+  function qamrov() {
+    var juft = 0, dori = 0;
+    try { juft = (window.UZMED_DDI && window.UZMED_DDI.pairs && window.UZMED_DDI.pairs.length) || 0; } catch (e) {}
+    try { dori = window.FULL_DRUG_DB ? Object.keys(window.FULL_DRUG_DB).length : 0; } catch (e) {}
+    return { juftlik: juft, dori: dori, onlayn: (typeof navigator !== 'undefined') && navigator.onLine !== false };
+  }
+
+  var MATN = 'Oflayn o`zaro ta`sir bazasi cheklangan: {N} ta tekshirilgan juftlik. ' +
+             '«Ta`sir topilmadi» degani «ta`sir yo`q» degani EMAS. ' +
+             'Muhim qarorlarda to`liq manbani (RxNorm / DailyMed / rasmiy yo`riqnoma) tekshiring.';
+
+  function ogohlantirishMatni() { return MATN.replace('{N}', String(qamrov().juftlik)); }
+
+  function stil() {
+    if (document.getElementById('uzm-ddi-note-style')) return;
+    var s = document.createElement('style');
+    s.id = 'uzm-ddi-note-style';
+    s.textContent =
+      '.uzm-ddi-note{display:flex;gap:9px;align-items:flex-start;margin:10px 0;padding:10px 12px;' +
+      'border:1px solid rgba(217,119,6,.42);background:rgba(217,119,6,.10);border-radius:10px;' +
+      'font-size:12.5px;line-height:1.55;color:var(--text,#0f172a)}' +
+      '.uzm-ddi-note b{flex:none;font-size:13px;line-height:1.35}';
+    document.head.appendChild(s);
+  }
+
+  function element() {
+    stil();
+    var d = document.createElement('div');
+    d.className = 'uzm-ddi-note';
+    d.setAttribute('data-uzm-ddi-note', '1');
+    var i = document.createElement('b'); i.textContent = '⚠';
+    var t = document.createElement('span'); t.textContent = ogohlantirishMatni();
+    d.appendChild(i); d.appendChild(t);
+    return d;
+  }
+
+  // DDI paneli ochilganda ogohlantirishni bir marta qo'shamiz
+  function joyla() {
+    var hosts = document.querySelectorAll('[id*="ddi" i], [class*="ddi" i]');
+    for (var i = 0; i < hosts.length; i++) {
+      var h = hosts[i];
+      if (!h || h.offsetParent === null) continue;
+      if (h.querySelector('[data-uzm-ddi-note]')) continue;
+      if (h.getAttribute('data-uzm-ddi-done')) continue;
+      h.setAttribute('data-uzm-ddi-done', '1');
+      try { h.insertBefore(element(), h.firstChild); } catch (e) {}
+      return true;
+    }
+    return false;
+  }
+
+  try {
+    document.addEventListener('click', function () { setTimeout(joyla, 350); }, true);
+  } catch (e) {}
+
+  window.UZMEDDdiNotice = {
+    qamrov: qamrov,
+    matn: ogohlantirishMatni,
+    joyla: joyla,
+    /* Yangi ta'sir qo'shish uchun YAGONA yo'l — manba majburiy.
+       Manbasiz yoki tekshirilmagan yozuv QABUL QILINMAYDI. */
+    qoshish: function (rec) {
+      if (!rec || !rec.manba || !rec.a || !rec.b) {
+        console.warn('[UZMED DDI] Rad etildi: `a`, `b` va `manba` majburiy. ' +
+                     'Tekshirilmagan klinik ma`lumot qo`shilmaydi.');
+        return false;
+      }
+      rec._verified = false;   // shifokor tasdig'igacha
+      try {
+        window.UZMED_DDI_QOSHIMCHA = window.UZMED_DDI_QOSHIMCHA || [];
+        window.UZMED_DDI_QOSHIMCHA.push(rec);
+        return true;
+      } catch (e) { return false; }
+    }
+  };
+})();
+</script>
+
+<!-- ─── X-11 · atribut konteksti uchun qattiq escape (mavjud esc TEGILMAYDI) ─── -->
+<script id="uzmed-fix-esc-attr-v1">
+(function () {
+  'use strict';
+  if (window.uzmedEscAttr) return;
+  /* Mavjud uzmedEsc `& < >` ni almashtiradi va MATN uchun to'g'ri ishlaydi —
+     u o'zgartirilmaydi (textContent bilan ishlatilsa buzilib ketardi).
+     Atribut ichiga qiymat qo'yish kerak bo'lganda SHU funksiya ishlatiladi. */
+  window.uzmedEscAttr = function (s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+})();
+</script>
+
+<!-- ─── X-12 · localStorage kalit nomlanishi: FAQAT O'QISH uchun alias ─── -->
+<script id="uzmed-fix-ls-alias-v1">
+(function () {
+  'use strict';
+  if (window.UZMEDStorageKeys) return;
+  /* Hech qanday kalit ko'chirilmaydi va o'chirilmaydi. Bu yordamchi
+     ikkala uslubdagi nomni ham topib beradi — mavjud kod o'z holicha ishlaydi. */
+  window.UZMEDStorageKeys = {
+    oqi: function (nom) {
+      var variantlar = [nom, nom.toUpperCase(), nom.toLowerCase(),
+        nom.replace(/^uzmed_/i, 'UZMED_'), nom.replace(/^UZMED_/, 'uzmed_')];
+      for (var i = 0; i < variantlar.length; i++) {
+        try { var v = localStorage.getItem(variantlar[i]); if (v !== null) return v; } catch (e) {}
+      }
+      return null;
+    },
+    royxat: function () {
+      var r = [];
+      try { for (var i = 0; i < localStorage.length; i++) r.push(localStorage.key(i)); } catch (e) {}
+      return r.sort();
+    }
+  };
+})();
+</script>
+
+<!-- ─── X-13 · MKB: WHO ICD-10 formatidan chetlangan kodlarni belgilash
+         Kodlar O'CHIRILMAYDI va O'ZGARTIRILMAYDI — faqat ro'yxatga olinadi. ─── -->
+<script id="uzmed-fix-mkb-audit-v1">
+(function () {
+  'use strict';
+  if (window.UZMEDMkbAudit) return;
+
+  var WHO = /^[A-Z]\d{2}(?:\.\d)?[+*]?$|^[A-Z]\d{2}-[A-Z]\d{2}$/;   // 3–4 belgi + diapazon + xanjar
+
+  function manba() {
+    try { if (typeof MKB_DATA !== 'undefined' && MKB_DATA) return MKB_DATA; } catch (e) {}
+    return window.MKB_DATA || null;
+  }
+
+  window.UZMEDMkbAudit = {
+    tekshir: function () {
+      var d = manba();
+      if (!d || !d.length) return { holat: 'MKB_DATA topilmadi' };
+      var chet = [];
+      for (var i = 0; i < d.length; i++) {
+        var kod = String((d[i] && d[i][0]) || '').trim();
+        if (kod && !WHO.test(kod)) chet.push(kod);
+      }
+      return {
+        jami: d.length,
+        whoMos: d.length - chet.length,
+        chetlangan: chet.length,
+        namuna: chet.slice(0, 25),
+        izoh: 'Chetlangan kodlar ICD-10-CM (AQSH) kengaytmasi bo`lishi mumkin. ' +
+              'O`zbekiston rasmiy hisobotida WHO ICD-10 ishlatiladi — statistik ' +
+              'hisobotga tushishidan oldin shifokor tasdig`i talab qilinadi.'
+      };
+    }
+  };
+})();
+</script>
