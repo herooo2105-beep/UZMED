@@ -326,12 +326,14 @@ function tryEvalLiteral(text) {
   dataStats.MKB_DATA = arr.length;
 
   /**
-   * Rasmiy ICD-10 formatlari:
-   *   A00        — 3 belgili kod          A00.0 / A00.05 — subkod
-   *   A00-A09    — blok diapazoni         A00-B99        — bob diapazoni
+   * Rasmiy WHO ICD-10 formatlari (QAT'IY):
+   *   A00        — 3 belgili kategoriya
+   *   A00.0      — 4-belgi: BITTA o'nlik raqam (WHO standarti shu bilan tugaydi)
+   *   A00-A09    — blok/bob diapazoni
    *   A02.2+ / A02.2* — xanjar(†)/yulduzcha(*) juftlik belgisi
+   * Undan uzun subkodlar (A00.05, L02.211) — ICD-10-CM kengaytmasi.
    */
-  const codeRe = /^[A-Z]\d{2}(?:\.\d{1,2})?[+*]?$|^[A-Z]\d{2}-[A-Z]\d{2}$/;
+  const codeRe = /^[A-Z]\d{2}(?:\.\d)?[+*]?$|^[A-Z]\d{2}-[A-Z]\d{2}$/;
   const seen = Object.create(null);
   let badShape = 0, badCode = 0, emptyUz = 0, dup = 0;
   const dupSamples = [], badCodeSamples = [], emptyUzSamples = [];
