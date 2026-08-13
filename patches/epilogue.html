@@ -752,11 +752,15 @@
     return r;
   }
 
+  var oxirgiXato = null;
+
   window.fetch = function (url, opts) {
+    var geminiSorov = false, tozaUrl = '', tozaOpts = null;
     try {
       if (typeof url === 'string') {
         /* ── Gemini ── */
         if (url.indexOf('generativelanguage.googleapis.com') >= 0) {
+          geminiSorov = true;
           var yangi = url.replace(/models\/([^:/?]+):/, function (all, m) {
             return ESKI.test(m) ? 'models/' + MODEL + ':' : all;
           });
@@ -785,6 +789,8 @@
             }
           }
           if (yangi !== url) { arguments[0] = yangi; }
+          tozaUrl = yangi;                       // proxy'siz, to'g'ridan-to'g'ri manzil
+          tozaOpts = arguments[1] || opts || null;
         }
         /* ── Groq ── */
         else if (url.indexOf('api.groq.com') >= 0) {
@@ -808,11 +814,97 @@
         }
       }
     } catch (e) {}
-    return _fetch.apply(this, arguments);
+
+    var javob = _fetch.apply(this, arguments);
+
+    /* ── Avtomatik qayta urinish ────────────────────────────────────────
+       Gemini so'rovi 401/403 (kalit rad etildi) yoki 404 (model yo'q)
+       qaytarsa — bu odatda Cloudflare Worker eski kalit bilan javob
+       berayotganini bildiradi. Shunday holatda so'rov proxy'siz, bizning
+       kalitimiz bilan TO'G'RIDAN-TO'G'RI Google'ga qayta yuboriladi. */
+    if (geminiSorov && tozaUrl) {
+      javob = javob.then(function (r) {
+        if (r && (r.status === 401 || r.status === 403 || r.status === 404)) {
+          oxirgiXato = 'HTTP ' + r.status + ' → to`g`ridan-to`g`ri qayta urinildi';
+          try {
+            return _fetch.call(window, tozaUrl, tozaOpts || undefined)
+              .then(function (r2) { if (r2 && r2.ok) oxirgiXato += ' ✅ muvaffaqiyat'; return r2; })
+              .catch(function () { return r; });
+          } catch (e) { return r; }
+        }
+        return r;
+      });
+    }
+    return javob;
   };
+
+  /* ── Cloudflare proxy'ni chetlab o'tish ───────────────────────────────
+     `uzmed-cf-proxy-shim` bloki so'rovni Cloudflare Worker'ga yo'naltiradi
+     VA `?key=` hamda `x-goog-api-key` ni OLIB TASHLAYDI — kalit Worker'ning
+     KV xotirasida saqlanishi kerak degan mantiq bilan. Worker'dagi kalit
+     esa eski va bekor qilingan → 401/403.
+
+     Shim bizning qatlamimizdan KEYIN ishlaydi (u eng ichki o'ram), shuning
+     uchun biz qo'ygan kalitni ham olib tashlaydi. Yechim: shim faollik
+     bayrog'ini o'chirib qo'yamiz — u holda shim so'rovga umuman tegmaydi
+     va kalit to'g'ridan-to'g'ri Google'ga boradi.
+
+     Foydalanuvchi Worker'ni to'g'ri sozlagach, UZMEDKeys.proxy(true) bilan
+     qaytarib yoqishi mumkin. */
+  function proxyOchir() {
+    try {
+      if (localStorage.getItem('uzp_cf_active') === '1') {
+        localStorage.setItem('uzp_cf_active', '0');
+        localStorage.setItem('uzp_cf_active_oldingi', '1');
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  var proxyOchirildi = proxyOchir();
+
+  /* ── Eski localStorage kalitlarini tozalash ───────────────────────────
+     Qurilmada oldingi versiyadan qolgan bekor qilingan kalit bo'lsa,
+     ilova o'shani ishlatib 401 oladi. Bizda haqiqiy kalit bo'lsa —
+     eskisini almashtiramiz (faqat bizniki bor bo'lganda). */
+  (function eskiniAlmashtir() {
+    var g = haqiqiy(GEMINI_RAW), q = haqiqiy(GROQ_RAW);
+    if (!g && !q) return;
+    try {
+      if (g) {
+        var eskiG = oqi('UZMED_GEMINI_KEY');
+        if (eskiG && eskiG !== g) yoz('UZMED_GEMINI_KEY', g);
+      }
+      if (q) {
+        ['uzmed_ai_key', 'UZMED_GROQ_KEY'].forEach(function (k) {
+          var v = oqi(k);
+          if (v && v !== q) yoz(k, q);
+        });
+      }
+    } catch (e) {}
+  })();
 
   /* ── Ommaviy API: kalitni keyin almashtirish uchun ── */
   window.UZMEDKeys = {
+    /* Nima bo'layotganini bir qarashda ko'rish uchun */
+    tashxis: function () {
+      function niqob(k) { return k ? (k.slice(0, 8) + '…' + k.slice(-4)) : 'yo`q'; }
+      var cfUrl = '', cfActive = '';
+      try { cfUrl = localStorage.getItem('uzp_cf_url') || ''; cfActive = localStorage.getItem('uzp_cf_active') || ''; } catch (e) {}
+      return {
+        geminiKalit: niqob(kalitGemini()),
+        groqKalit: niqob(kalitGroq()),
+        model: oqi('uzmed_gemini_model') || MODEL,
+        cloudflareProxy: cfActive === '1' ? 'FAOL (kalitni olib tashlaydi!)' : 'o`chiq ✅',
+        cloudflareUrl: cfUrl || 'sozlanmagan',
+        proxyBizOchirdikmi: proxyOchirildi,
+        patchVersiya: 'uzmed-fix-ai-keys-v2'
+      };
+    },
+    proxy: function (yoq) {
+      try { localStorage.setItem('uzp_cf_active', yoq ? '1' : '0'); } catch (e) {}
+      return this.tashxis();
+    },
     holat: function () {
       var g = kalitGemini(), q = kalitGroq();
       function niqob(k) { return k ? (k.slice(0, 6) + '…' + k.slice(-4) + ' (' + k.length + ')') : 'yo`q'; }
