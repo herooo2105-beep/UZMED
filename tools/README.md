@@ -8,7 +8,8 @@ Tashqi bog'liqlik yo'q: Node core + Playwright (runtime testlar uchun).
 ## Talablar
 
 - Node.js ≥ 18
-- Playwright + Chromium (faqat `uzmed-runtime.js` va `uzmed-clinical-test.js` uchun)
+- Playwright + Chromium (faqat `uzmed-runtime.js`, `uzmed-clinical-test.js`,
+  `uzmed-preservation.js` va `uzmed-free-ai-runtime.js` uchun)
 
 Katta fayl uchun heap oshiriladi:
 
@@ -78,13 +79,64 @@ TBSA > 100%, SBP < DBP, yosh 0 — barchasi `null` qaytarishi shart.
 
 Bitta test yiqilsa exit code = 1.
 
+## 4. `uzmed-free-ai-test.js` — bepul AI zanjiri (brauzersiz)
+
+```bash
+node tools/uzmed-free-ai-test.js [patches/epilogue.html]
+```
+
+`uzmed-up-ai-free-*` bloklarini `patches/epilogue.html` dan ajratib olib,
+soxta `window` / `localStorage` / `fetch` muhitida **haqiqatan bajaradi**.
+Playwright kerak emas, ~1 soniya ishlaydi.
+
+57 ta test: zanjir tuzilishi va tartibi · kalitli/kalitsiz qatlamlar ·
+`faqatMaxfiy` filtri · fetch zaxirasi va Gemini javob shaklining saqlanishi ·
+**begona so'rovlarga tegmaslik** (stream, SSE, model'siz endpoint, GET) ·
+model 404 da keyingi modelga, 401 da keyingi provayderga o'tish ·
+kalitning URL va `holat()` chiqishiga tushmasligi · `UZMED_ONLINE.generate`
+integratsiyasi · rekursiya himoyasi · vision · JSON rejim · bo'sh javob,
+JSON bo'lmagan javob, tarmoq uzilishi.
+
+## 5. `uzmed-free-ai-runtime.js` — bepul AI zanjiri (jonli brauzer)
+
+```bash
+node tools/uzmed-free-ai-runtime.js UZMED__.html
+# boshqa Chromium build: PW_CHROMIUM=/yo'l/chrome node tools/…
+```
+
+Haqiqiy faylni Chromium'da ochadi va **butun tarmoqni ushlab turadi**:
+Gemini/Groq/OpenAI → 404, bepul provayderlar → 200. Haqiqiy tarmoqqa
+chiqilmaydi, kalit ishlatilmaydi.
+
+17 ta tekshiruv: modul yuklanishi · Sozlamalardagi element va oyna ·
+`LOG` belgisi · fetch zaxirasi (404 → 200, Gemini shakli saqlanadi) ·
+`sinov()` tugmasi · `UZMED_ONLINE.generate` o'ralishi · sahifada
+`pageerror` / `console.error` yo'qligi.
+
+## 6. `uzmed-unbuild.js` — build'ni teskari qaytarish
+
+```bash
+node tools/uzmed-unbuild.js UZMED.html manba.html [--keys patches/keys.local.json]
+```
+
+Repoda asl manba saqlanmaydi — faqat yig'ilgan build. `uzmed-build-patched.js`
+ni yig'ilgan fayl ustida qayta ishga tushirish bloklarni **ikki marta**
+qo'shadi (dublikat script id → audit yiqiladi). Bu vosita prologue va
+epilogue ni olib tashlab asl manbani tiklaydi, build vaqtida qo'yilgan
+API kalitlarni `keys.local.json` ga ajratib oladi (u `.gitignore` da).
+
+**Isbot:** tiklangan manba + ayni epilogue kirish fayliga bayt-ma-bayt teng
+bo'lishi tekshiriladi. Teng bo'lmasa hech narsa yozilmaydi va exit code = 1.
+
 ## Reliz oldidan to'liq tekshiruv
 
 ```bash
 UZ=UZMED.html
 node --max-old-space-size=6144 tools/uzmed-audit.js "$UZ" --json audit.json &&
-node tools/uzmed-runtime.js       "$UZ" --json runtime.json &&
-node tools/uzmed-clinical-test.js "$UZ"
+node tools/uzmed-runtime.js          "$UZ" --json runtime.json &&
+node tools/uzmed-clinical-test.js    "$UZ" &&
+node tools/uzmed-free-ai-test.js          &&
+node tools/uzmed-free-ai-runtime.js  "$UZ"
 ```
 
-Uchalasi ham 0 bilan tugasa, build tarqatishga tayyor.
+Barchasi 0 bilan tugasa, build tarqatishga tayyor.

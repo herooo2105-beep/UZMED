@@ -926,3 +926,845 @@
   };
 })();
 </script>
+
+<!-- ─── U-01 · BEPUL AI PROVAYDERLAR ZANJIRI (awesome-free-llm-apis)
+     MUAMMO: AI yo'li bitta nuqtaga bog'liq. Gemini kaliti bekor qilinsa yoki
+     Google model nomini olib tashlasa (2026-08-13 da aynan shu bo'ldi:
+     gemini-2.0-flash / 2.5-flash / 2.5-flash-lite → HTTP 404), butun AI
+     to'xtaydi. Mavjud `uzmed-fix-ai-provider-v3` zanjiri faqat uch host
+     bilan cheklangan: Gemini → Groq → OpenAI. Uchalasi ham bitta sababdan
+     (kalit muddati, kvota, mintaqa cheklovi) bir vaqtda yiqilishi mumkin.
+
+     YECHIM: OpenAI-mos bepul provayderlar registri qo'shiladi. Manba —
+     github.com/mnfst/awesome-free-llm-apis (README, 2026-08-14 da o'qildi).
+     Ikki qatlam:
+       1) KALITLI  — foydalanuvchi Sozlamalardan kalit kiritsa faollashadi
+       2) KALITSIZ — ro'yxatdan o'tishsiz ishlaydigan zaxira (OVHcloud, LLM7)
+     Kalitsiz qatlam tufayli AI hech qanday kalitsiz ham javob beradi.
+
+     ADDITIV: mavjud zanjir BIRINCHI bo'lib ishlaydi va o'zgartirilmaydi.
+     Bu blok faqat mavjud zanjir TUGAGANDAN keyin ishga tushadi. Gemini
+     ishlayotgan bo'lsa — bu kod umuman chaqirilmaydi va xatti-harakat
+     0 % o'zgaradi.
+
+     ⚠️ MAXFIYLIK: bu provayderlar uchinchi tomon serverlari. Ba'zilari
+     so'rovni model o'qitish uchun saqlashi mumkin (manbada ochiq yozilgan:
+     Mistral «prompts may be used to improve models», OpenRouter «free
+     providers may log prompts for training»). Bemor identifikatorlarini
+     yubormaslik kerak. `UZMEDFreeAI.faqatMaxfiy(true)` shunday
+     provayderlarni zanjirdan chiqaradi. ─── -->
+<script id="uzmed-up-ai-free-chain-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_UP_AI_FREE__) return;
+  window.__UZMED_UP_AI_FREE__ = true;
+
+  /* ── localStorage kalitlari ── */
+  var LS_KEY    = 'UZMED_FREE_KEY_';      // + provayder id
+  var LS_OFF    = 'UZMED_FREE_DISABLED';  // vergul bilan ajratilgan id lar
+  var LS_ON     = 'UZMED_FREE_ENABLED';   // '0' bo'lsa butun qatlam o'chiq
+  var LS_NOLOG  = 'UZMED_FREE_NOLOG';     // '1' bo'lsa log qiladiganlar chiqariladi
+  var LS_EXTRA  = 'UZMED_FREE_EXTRA';     // foydalanuvchi qo'shgan provayderlar (JSON)
+
+  function oqi(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function yoz(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+
+  /* ── PROVAYDER REGISTRI ─────────────────────────────────────────────────
+     Manba: github.com/mnfst/awesome-free-llm-apis/README.md (2026-08-14).
+     Har yozuv:
+       id      — ichki nom (localStorage kaliti shu id bilan yasaladi)
+       nom     — foydalanuvchiga ko'rinadigan nom
+       url     — OpenAI-mos /chat/completions manzili
+       modellar— navbat bilan sinaladi; biri 404 bersa keyingisiga o'tiladi
+       vision  — rasm (dataURL) yubora oladimi
+       kalit   — 'bearer' (Authorization) yoki 'yoq' (kalitsiz)
+       olish   — kalit olinadigan manzil (UI da ko'rsatiladi)
+       log     — provayder so'rovni o'qitish uchun saqlashi MANBADA yozilgan
+       limit   — bepul chegara (manbadan)
+
+     ⚠️ Model nomlari provayder tomonidan istalgan vaqtda o'zgartiriladi —
+     aynan shu sabab Gemini bir marta yiqilgan. Shuning uchun:
+       • har provayderda bir nechta model bor (biri o'lsa — keyingisi)
+       • `UZMEDFreeAI.modellar(id)` jonli ro'yxatni provayderdan so'raydi
+       • `UZMEDFreeAI.provayderQosh({...})` bilan yangisini kod tegmasdan
+         qo'shish mumkin (localStorage da saqlanadi) */
+  var REGISTR = [
+    { id: 'cerebras', nom: 'Cerebras', url: 'https://api.cerebras.ai/v1/chat/completions',
+      modellar: ['gpt-oss-120b', 'gemma-4-31b'], vision: false, kalit: 'bearer',
+      olish: 'https://cloud.cerebras.ai/', log: false, limit: '1M token/kun, 5 RPM' },
+
+    { id: 'sambanova', nom: 'SambaNova', url: 'https://api.sambanova.ai/v1/chat/completions',
+      modellar: ['Meta-Llama-3.3-70B-Instruct', 'DeepSeek-V3.1', 'gpt-oss-120b'],
+      vision: false, kalit: 'bearer', olish: 'https://cloud.sambanova.ai/apis',
+      log: false, limit: '20 RPM, 20 RPD, 200K token/kun' },
+
+    { id: 'github', nom: 'GitHub Models', url: 'https://models.github.ai/inference/chat/completions',
+      modellar: ['gpt-4.1-mini', 'gpt-4o', 'gpt-4.1'], vision: true, kalit: 'bearer',
+      olish: 'https://github.com/settings/tokens', log: false,
+      limit: '10–15 RPM, 50–150 RPD (8K kirish / 4K chiqish)' },
+
+    { id: 'nvidia', nom: 'NVIDIA NIM', url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+      modellar: ['meta/llama-3.3-70b-instruct', 'nvidia/nemotron-3-super-120b-a12b'],
+      vision: false, kalit: 'bearer', olish: 'https://build.nvidia.com/explore/discover',
+      log: false, limit: '~40 RPM' },
+
+    { id: 'mistral', nom: 'Mistral AI', url: 'https://api.mistral.ai/v1/chat/completions',
+      /* Manba modelni ko'rsatma nomi bilan beradi («Mistral Small 4»), API id
+         emas. Shuning uchun barqaror `-latest` taxalluslari ishlatiladi va
+         xato bo'lsa keyingisiga o'tiladi. Aniq ro'yxat: UZMEDFreeAI.modellar('mistral') */
+      modellar: ['mistral-small-latest', 'mistral-medium-latest', 'ministral-8b-latest'],
+      vision: true, kalit: 'bearer', olish: 'https://console.mistral.ai/api-keys',
+      log: true, limit: '~1B token/oy' },
+
+    { id: 'openrouter', nom: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions',
+      modellar: ['openai/gpt-oss-20b:free', 'nvidia/nemotron-3-super-120b-a12b:free',
+                 'google/gemma-4-31b-it:free', 'openrouter/free'],
+      vision: true, kalit: 'bearer', olish: 'https://openrouter.ai/keys',
+      log: true, limit: '20 RPM, 50 RPD' },
+
+    { id: 'siliconflow', nom: 'SiliconFlow', url: 'https://api.siliconflow.cn/v1/chat/completions',
+      modellar: ['Qwen/Qwen3-8B'], vision: false, kalit: 'bearer',
+      olish: 'https://cloud.siliconflow.cn/account/ak', log: false, limit: '30 RPM' },
+
+    /* ── KALITSIZ ZAXIRA ─────────────────────────────────────────────────
+       Ro'yxatdan o'tish talab qilinmaydi. Limit past, lekin AI butunlay
+       to'xtab qolishining oldini oladi. */
+    { id: 'ovh', nom: 'OVHcloud (kalitsiz)',
+      url: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions',
+      modellar: ['gpt-oss-120b', 'Meta-Llama-3_3-70B-Instruct', 'Mistral-7B-Instruct-v0.3'],
+      vision: false, kalit: 'yoq', olish: '', log: false,
+      limit: '2 RPM har IP (anonim), EU serverlari' },
+
+    { id: 'llm7', nom: 'LLM7.io (kalitsiz)', url: 'https://api.llm7.io/v1/chat/completions',
+      modellar: ['gpt-4o-mini', 'deepseek-v3-0324'], vision: true, kalit: 'ixtiyoriy',
+      olish: 'https://token.llm7.io', log: false, limit: '30 RPM (token bilan 120)' }
+  ];
+
+  /* Foydalanuvchi qo'shgan provayderlar — kod tahrirlanmasdan kengaytirish */
+  function qoshimcha() {
+    try {
+      var v = JSON.parse(oqi(LS_EXTRA) || '[]');
+      return Object.prototype.toString.call(v) === '[object Array]' ? v : [];
+    } catch (e) { return []; }
+  }
+  function hammaProvayder() { return REGISTR.concat(qoshimcha()); }
+
+  function kalitOl(p) {
+    if (p.kalit === 'yoq') return '';
+    return oqi(LS_KEY + p.id).trim();
+  }
+  function ochiqmi(p) {
+    var off = oqi(LS_OFF).split(',');
+    for (var i = 0; i < off.length; i++) if (off[i].trim() === p.id) return false;
+    return true;
+  }
+  function qatlamYoqilgan() { return oqi(LS_ON) !== '0'; }
+  function faqatMaxfiyRejim() { return oqi(LS_NOLOG) === '1'; }
+
+  /* Zanjir: kalitli provayderlar oldinda (tez, limit yuqori),
+     kalitsizlar oxirida (zaxira). */
+  function zanjir(visionKerak) {
+    if (!qatlamYoqilgan()) return [];
+    var kalitli = [], kalitsiz = [];
+    var hamma = hammaProvayder();
+    for (var i = 0; i < hamma.length; i++) {
+      var p = hamma[i];
+      if (!p || !p.id || !p.url) continue;
+      if (!ochiqmi(p)) continue;
+      if (faqatMaxfiyRejim() && p.log) continue;
+      if (visionKerak && !p.vision) continue;
+      var k = kalitOl(p);
+      if (p.kalit === 'yoq') { kalitsiz.push({ p: p, key: '' }); }
+      else if (k) { kalitli.push({ p: p, key: k }); }
+      else if (p.kalit === 'ixtiyoriy') { kalitsiz.push({ p: p, key: '' }); }
+    }
+    return kalitli.concat(kalitsiz);
+  }
+
+  /* ── dataURL → OpenAI vision content ── */
+  function kontent(prompt, imgs) {
+    if (!imgs || !imgs.length) return prompt;
+    var c = [{ type: 'text', text: prompt }];
+    for (var i = 0; i < imgs.length; i++) c.push({ type: 'image_url', image_url: { url: imgs[i] } });
+    return c;
+  }
+
+  /* ── Bitta model bilan bitta so'rov ────────────────────────────────────
+     AbortController bilan qat'iy timeout; xato matni qisqartiriladi;
+     kalit hech qachon log ga tushmaydi. */
+  function birSorov(rec, model, prompt, jsonMode, imgs) {
+    var p = rec.p;
+    var kutish = (imgs && imgs.length) ? 90000 : 40000;
+    var ac = null;
+    try { ac = new AbortController(); } catch (e) {}
+    var vaqt = setTimeout(function () { try { if (ac) ac.abort(); } catch (e) {} }, kutish);
+
+    var body = {
+      model: model,
+      messages: [{ role: 'user', content: kontent(prompt, imgs) }],
+      temperature: 0.3,
+      max_tokens: 4096
+    };
+    if (jsonMode) body.response_format = { type: 'json_object' };
+
+    var h = { 'Content-Type': 'application/json' };
+    if (rec.key) h.Authorization = 'Bearer ' + rec.key;
+
+    var opts = { method: 'POST', headers: h, body: JSON.stringify(body) };
+    if (ac) opts.signal = ac.signal;
+
+    /* __uzmedFreeSkip: o'z so'rovimiz pastdagi fallback qatlamiga qayta
+       tushmasligi uchun belgi (cheksiz rekursiya himoyasi) */
+    opts.__uzmedFreeSkip = true;
+
+    var net = (window.__uzmedFreeFetch || window.fetch);
+    return net(p.url, opts)
+      .then(function (r) {
+        return r.text().then(function (txt) { return { ok: r.ok, status: r.status, txt: txt }; });
+      })
+      .then(function (res) {
+        clearTimeout(vaqt);
+        var d = null;
+        try { d = JSON.parse(res.txt); } catch (e) {}
+        if (!res.ok) {
+          var em = (d && d.error && (d.error.message || d.error.code || d.error)) ||
+                   ('HTTP ' + res.status + ' ' + String(res.txt).slice(0, 100));
+          var xato = new Error(String(em).slice(0, 180));
+          xato.status = res.status;
+          throw xato;
+        }
+        var ch = d && d.choices && d.choices[0];
+        var t = (ch && ch.message && ch.message.content) || '';
+        if (typeof t !== 'string') t = String(t || '');
+        if (!t.trim()) throw new Error('javob bo`sh');
+        return t;
+      })
+      .catch(function (e) {
+        clearTimeout(vaqt);
+        var m = (e && e.name === 'AbortError')
+          ? ('timeout ' + (kutish / 1000) + 's')
+          : ((e && e.message) ? e.message : String(e));
+        var x = new Error(m);
+        x.status = e && e.status;
+        throw x;
+      });
+  }
+
+  /* Model 404/400 bo'lsa keyingi modelga o'tish arziydi;
+     401/403 (kalit) yoki 429 (kvota) bo'lsa — bu provayderda model
+     almashtirish foyda bermaydi, darhol keyingi provayderga o'tiladi. */
+  function modelAlmashsinmi(e) {
+    var s = e && e.status;
+    if (s === 401 || s === 403 || s === 429) return false;
+    return true;
+  }
+
+  /* ── Bitta provayder: modellarni navbat bilan sinaydi ── */
+  function birProvayder(rec, prompt, jsonMode, imgs, xatolar) {
+    var ms = rec.p.modellar || [];
+    var i = 0;
+    function keyingi() {
+      if (i >= ms.length) return Promise.reject(new Error('modellar tugadi'));
+      var m = ms[i++];
+      return birSorov(rec, m, prompt, jsonMode, imgs).catch(function (e) {
+        xatolar.push(rec.p.nom + '/' + m + ': ' + e.message);
+        if (i < ms.length && modelAlmashsinmi(e)) return keyingi();
+        throw e;
+      });
+    }
+    return keyingi();
+  }
+
+  /* ── Ommaviy yadro: zanjir bo'ylab yurish ── */
+  function sora(prompt, imgs) {
+    var p = String(prompt == null ? '' : prompt);
+    var vision = !!(imgs && imgs.length);
+    var list = zanjir(vision);
+    var jsonMode = /json/i.test(p);
+    var xatolar = [];
+    if (!list.length) {
+      return Promise.reject(new Error(
+        vision ? 'Rasmni o`qiy oladigan bepul provayder yoqilmagan'
+               : 'Bepul provayderlar zanjiri bo`sh (Sozlamalar → Bepul AI provayderlar)'));
+    }
+    var i = 0;
+    function keyingi() {
+      if (i >= list.length) {
+        var uniq = [];
+        for (var k = 0; k < xatolar.length; k++)
+          if (uniq.indexOf(xatolar[k]) < 0) uniq.push(xatolar[k]);
+        return Promise.reject(new Error(uniq.slice(0, 3).join(' | ') || 'javob yo`q'));
+      }
+      var rec = list[i++];
+      return birProvayder(rec, p, jsonMode, imgs, xatolar).then(function (t) {
+        try { console.log('[UZMED bepul AI] ' + rec.p.nom + ' → OK'); } catch (e) {}
+        oxirgi = { provayder: rec.p.nom, vaqt: new Date().toLocaleTimeString() };
+        return t;
+      }).catch(function () { return keyingi(); });
+    }
+    return keyingi();
+  }
+
+  var oxirgi = null;
+
+  /* ── 1-ULANISH NUQTASI: UZMED_ONLINE.generate ─────────────────────────
+     Mavjud zanjir (uzmed-fix-ai-provider-v3) BIRINCHI ishlaydi; faqat u
+     xato qaytarganda bepul zanjir ishga tushadi. Kontrakt o'zgarmaydi:
+     cb({text}) / cb({error}). */
+  function ulan() {
+    var O = window.UZMED_ONLINE;
+    if (!O || typeof O.generate !== 'function') return false;
+    if (O.__uzFreeChain) return true;
+
+    var _gen = O.generate;
+    O.generate = function (prompt, cb) {
+      if (typeof cb !== 'function') cb = function () {};
+      _gen(prompt, function (o) {
+        if (o && o.text) { cb(o); return; }
+        var asl = (o && o.error) ? String(o.error) : 'asosiy zanjir javob bermadi';
+        sora(prompt, null)
+          .then(function (t) { cb({ text: t, __zaxira: true }); })
+          .catch(function (e) { cb({ error: asl + ' || bepul zanjir: ' + e.message }); });
+      });
+    };
+
+    if (typeof O.generateVision === 'function') {
+      var _vis = O.generateVision;
+      O.generateVision = function (prompt, images, cb) {
+        if (typeof cb !== 'function') cb = function () {};
+        _vis(prompt, images, function (o) {
+          if (o && o.text) { cb(o); return; }
+          var asl = (o && o.error) ? String(o.error) : 'asosiy zanjir javob bermadi';
+          sora(prompt, images)
+            .then(function (t) { cb({ text: t, __zaxira: true }); })
+            .catch(function (e) { cb({ error: asl + ' || bepul zanjir: ' + e.message }); });
+        });
+      };
+    }
+    O.hasKey = function () { return true; };
+    O.__uzFreeChain = true;
+    try { console.log('[UZMED bepul AI] zanjir ulandi (' + zanjir(false).length + ' provayder)'); } catch (e) {}
+    return true;
+  }
+
+  /* UZMED_ONLINE kech yaratiladi — retry mount (leak yo'q, 40 urinish) */
+  if (!ulan()) {
+    var n = 0;
+    var iv = setInterval(function () { if (ulan() || ++n > 40) clearInterval(iv); }, 250);
+  }
+
+  /* ── 2-ULANISH NUQTASI: fetch darajasidagi zaxira ──────────────────────
+     Ilovaning asosiy AI chati va RAG UZMED_ONLINE dan o'tmaydi — ular
+     to'g'ridan-to'g'ri Gemini ga `fetch` qiladi va javobni
+     `candidates[0].content.parts[]` shaklida o'qiydi. Shu yo'l ham
+     yiqilmasligi uchun: asosiy so'rov muvaffaqiyatsiz bo'lsa, bepul
+     zanjir javobi AYNI SHAKLDA qaytariladi va chaqiruvchi kod hech
+     narsani sezmaydi.
+
+     Bu qatlam eng tashqi o'ram (epilogue oxirida) — ichkaridagi CF proxy
+     shim, kalit tuzatish va token hisoblagich o'z ishini avvalgidek
+     bajaradi. */
+  var _fetch = window.fetch;
+  if (typeof _fetch !== 'function') { chiqar(); return; }
+  window.__uzmedFreeFetch = _fetch.bind(window);   // rekursiyasiz ichki chaqiruv
+
+  function urlMatn(u) {
+    if (typeof u === 'string') return u;
+    return (u && (u.url || u.href)) || '';
+  }
+
+  /* So'rovni tanish. Faqat ANIQ tanilgan ikki shakl qabul qilinadi —
+     boshqa hech qanday so'rovga tegilmaydi. */
+  function tanish(u, opts) {
+    if (!opts || opts.__uzmedFreeSkip) return null;
+    if (!opts.body || typeof opts.body !== 'string') return null;
+    if (/streamGenerateContent|alt=sse/i.test(u)) return null;   // stream — tegilmaydi
+
+    var b;
+    try { b = JSON.parse(opts.body); } catch (e) { return null; }
+    if (!b || b.stream === true) return null;
+
+    /* Gemini generateContent (to'g'ridan-to'g'ri yoki CF Worker orqali) */
+    if (/:generateContent/.test(u) && b.contents && b.contents.length) {
+      var txt = [], imgs = [];
+      for (var i = 0; i < b.contents.length; i++) {
+        var parts = (b.contents[i] && b.contents[i].parts) || [];
+        for (var j = 0; j < parts.length; j++) {
+          if (parts[j].text) txt.push(String(parts[j].text));
+          var inl = parts[j].inline_data || parts[j].inlineData;
+          if (inl && inl.data) {
+            imgs.push('data:' + (inl.mime_type || inl.mimeType || 'image/jpeg') +
+                      ';base64,' + inl.data);
+          }
+        }
+      }
+      if (!txt.length) return null;
+      return { tur: 'gemini', prompt: txt.join('\n\n'), imgs: imgs };
+    }
+
+    /* OpenAI-mos: faqat ilova haqiqatan ishlatadigan ikki host */
+    if (/\/chat\/completions/.test(u) &&
+        /(^|\/\/)(api\.groq\.com|api\.openai\.com)\//.test(u) &&
+        b.model && b.messages && b.messages.length) {
+      var son = b.messages[b.messages.length - 1];
+      var c = son && son.content;
+      var pr = '', im = [];
+      if (typeof c === 'string') pr = c;
+      else if (c && c.length) {
+        for (var k = 0; k < c.length; k++) {
+          if (c[k].type === 'text') pr += (pr ? '\n' : '') + c[k].text;
+          else if (c[k].type === 'image_url' && c[k].image_url) im.push(c[k].image_url.url);
+        }
+      }
+      if (!pr) return null;
+      return { tur: 'oai', prompt: pr, imgs: im };
+    }
+    return null;
+  }
+
+  /* Javobni chaqiruvchi kutgan shaklda yasaymiz.
+     ⚠️ usageMetadata QO'SHILMAYDI — bu Gemini tokeni emas, token
+     hisoblagichga soxta raqam yozish mumkin emas (hisoblagich `usageMetadata`
+     yo'qligini o'zi tekshiradi va bu javobni sanamaydi). */
+  function javobYasa(tur, matn) {
+    var obj = (tur === 'gemini')
+      ? { candidates: [{ content: { role: 'model', parts: [{ text: matn }] },
+                         finishReason: 'STOP', index: 0 }],
+          __uzmedZaxira: true }
+      : { choices: [{ index: 0, message: { role: 'assistant', content: matn },
+                      finish_reason: 'stop' }],
+          __uzmedZaxira: true };
+    try {
+      return new Response(JSON.stringify(obj), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (e) { return null; }
+  }
+
+  function yiqilganmi(r) {
+    if (!r) return true;
+    if (r.ok) return false;
+    return r.status === 400 || r.status === 401 || r.status === 403 ||
+           r.status === 404 || r.status === 429 || r.status >= 500;
+  }
+
+  window.fetch = function (url, opts) {
+    var u = '', sorov = null;
+    try { u = urlMatn(url); sorov = tanish(u, opts); } catch (e) { sorov = null; }
+
+    var natija;
+    try { natija = _fetch.apply(this, arguments); }
+    catch (e) { return Promise.reject(e); }
+
+    if (!sorov) return natija;
+
+    function zaxira(sabab) {
+      return sora(sorov.prompt, sorov.imgs).then(function (t) {
+        try { console.warn('[UZMED bepul AI] asosiy AI yiqildi (' + sabab +
+                           ') → zaxira provayder javob berdi'); } catch (e) {}
+        var r = javobYasa(sorov.tur, t);
+        if (!r) throw new Error('javob yasab bo`lmadi');
+        return r;
+      });
+    }
+
+    return natija.then(function (r) {
+      if (!yiqilganmi(r)) return r;
+      return zaxira('HTTP ' + (r && r.status)).catch(function () { return r; });
+      /* zaxira ham yiqilsa — ASL javob qaytariladi, ya'ni mavjud xato
+         ishlovi va foydalanuvchiga chiqadigan xabar o'zgarmaydi */
+    }, function (e) {
+      return zaxira((e && e.message) || 'tarmoq xatosi').catch(function () {
+        throw e;                                  // asl xato saqlanadi
+      });
+    });
+  };
+
+  /* ── Ommaviy API ── */
+  function chiqar() {
+    window.UZMEDFreeAI = {
+      /* Zanjir holati — kalitlar NIQOBLANGAN holda */
+      holat: function () {
+        var r = [];
+        var hamma = hammaProvayder();
+        for (var i = 0; i < hamma.length; i++) {
+          var p = hamma[i], k = kalitOl(p);
+          r.push({
+            id: p.id, nom: p.nom,
+            kalit: (p.kalit === 'yoq') ? 'kerak emas' : (k ? 'bor (' + k.length + ' belgi)' : 'yo`q'),
+            yoqilgan: ochiqmi(p),
+            zanjirda: (p.kalit === 'yoq' || p.kalit === 'ixtiyoriy' || !!k) && ochiqmi(p),
+            kalitBor: !!k, olish: p.olish || '',
+            vision: !!p.vision, logQiladi: !!p.log, limit: p.limit || '—'
+          });
+        }
+        return {
+          qatlam: qatlamYoqilgan() ? 'yoqilgan' : 'o`chiq',
+          faqatMaxfiy: faqatMaxfiyRejim(),
+          zanjirUzunligi: zanjir(false).length,
+          oxirgiZaxira: oxirgi,
+          provayderlar: r
+        };
+      },
+      /* Kalit o'rnatish/o'chirish */
+      kalitOrnat: function (id, kalit) {
+        var v = String(kalit == null ? '' : kalit).trim();
+        if (!v) { try { localStorage.removeItem(LS_KEY + id); } catch (e) {} return 'o`chirildi'; }
+        yoz(LS_KEY + id, v);
+        return 'saqlandi: ' + id;
+      },
+      provayderYoq: function (id, yoq) {
+        var off = oqi(LS_OFF).split(',').filter(function (x) { return x.trim() && x.trim() !== id; });
+        if (!yoq) off.push(id);
+        yoz(LS_OFF, off.join(','));
+        return this.holat();
+      },
+      qatlamYoq: function (yoq) { yoz(LS_ON, yoq ? '1' : '0'); return this.holat(); },
+      faqatMaxfiy: function (yoq) { yoz(LS_NOLOG, yoq ? '1' : '0'); return this.holat(); },
+
+      /* Yangi provayder — kod tahrirlanmaydi */
+      provayderQosh: function (p) {
+        if (!p || !p.id || !p.url || !p.modellar || !p.modellar.length) {
+          console.warn('[UZMED bepul AI] id, url va modellar[] majburiy');
+          return false;
+        }
+        var q = qoshimcha();
+        q = q.filter(function (x) { return x.id !== p.id; });
+        q.push({ id: p.id, nom: p.nom || p.id, url: p.url, modellar: p.modellar,
+                 vision: !!p.vision, kalit: p.kalit || 'bearer', olish: p.olish || '',
+                 log: !!p.log, limit: p.limit || '—' });
+        yoz(LS_EXTRA, JSON.stringify(q));
+        return true;
+      },
+      provayderOchir: function (id) {
+        yoz(LS_EXTRA, JSON.stringify(qoshimcha().filter(function (x) { return x.id !== id; })));
+        return true;
+      },
+
+      /* Jonli model ro'yxati — model nomi eskirganini aniqlash uchun */
+      modellar: function (id) {
+        var hamma = hammaProvayder(), p = null;
+        for (var i = 0; i < hamma.length; i++) if (hamma[i].id === id) p = hamma[i];
+        if (!p) return Promise.reject(new Error('provayder topilmadi: ' + id));
+        var base = p.url.replace(/\/chat\/completions.*$/, '') + '/models';
+        var h = {};
+        var k = kalitOl(p);
+        if (k) h.Authorization = 'Bearer ' + k;
+        return window.__uzmedFreeFetch(base, { headers: h, __uzmedFreeSkip: true })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            var d = (j && (j.data || j.models)) || [];
+            return d.map(function (x) { return (x && (x.id || x.name)) || String(x); });
+          });
+      },
+
+      /* Bitta provayderni sinash (UI dagi «Sinash» tugmasi shuni chaqiradi) */
+      sinov: function (id) {
+        var hamma = hammaProvayder(), p = null;
+        for (var i = 0; i < hamma.length; i++) if (hamma[i].id === id) p = hamma[i];
+        if (!p) return Promise.reject(new Error('provayder topilmadi: ' + id));
+        var rec = { p: p, key: kalitOl(p) };
+        var t0 = Date.now();
+        var xatolar = [];
+        return birProvayder(rec, 'Javob faqat bitta so`z: ishladi', false, null, xatolar)
+          .then(function (t) {
+            return { ok: true, ms: Date.now() - t0, javob: String(t).slice(0, 60) };
+          })
+          .catch(function (e) {
+            return { ok: false, ms: Date.now() - t0, xato: e.message, urinishlar: xatolar };
+          });
+      },
+
+      /* To'g'ridan-to'g'ri so'rov (diagnostika uchun) */
+      sora: function (prompt, images) { return sora(prompt, images || null); },
+      registr: function () { return hammaProvayder(); }
+    };
+  }
+  chiqar();
+})();
+</script>
+
+<!-- ─── U-02 · Sozlamalar → «Bepul AI provayderlar» oynasi
+     U-01 dagi zanjirni shifokor kod yozmasdan boshqarishi uchun.
+     Mavjud Sozlamalar elementlari o'zgartirilmaydi — ro'yxat oxiriga
+     bitta yangi `.settings-item` qo'shiladi (ilovaning o'z klasslari). ─── -->
+<script id="uzmed-up-ai-free-ui-v1">
+(function () {
+  'use strict';
+  if (window.__UZMED_UP_AI_FREE_UI__) return;
+  window.__UZMED_UP_AI_FREE_UI__ = true;
+
+  function api() { return window.UZMEDFreeAI || null; }
+
+  function stil() {
+    if (document.getElementById('uzm-fai-style')) return;
+    var s = document.createElement('style');
+    s.id = 'uzm-fai-style';
+    s.textContent =
+      '.uzm-fai-bg{position:fixed;inset:0;background:rgba(4,10,16,.66);z-index:99998;' +
+        'display:flex;align-items:flex-end;justify-content:center}' +
+      '.uzm-fai{background:var(--card,#fff);color:var(--text,#0f172a);width:100%;max-width:640px;' +
+        'max-height:88vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:18px 18px 28px;' +
+        'box-shadow:0 -8px 40px rgba(0,0,0,.34)}' +
+      '@media(min-width:680px){.uzm-fai-bg{align-items:center}.uzm-fai{border-radius:16px}}' +
+      '.uzm-fai-top{display:flex;align-items:center;gap:10px;margin-bottom:4px}' +
+      '.uzm-fai-h{font-size:18px;font-weight:700;flex:1}' +
+      '.uzm-fai-x{border:0;background:var(--chip,#eef2f6);color:inherit;width:32px;height:32px;' +
+        'border-radius:9px;font-size:18px;cursor:pointer;flex:none;line-height:1}' +
+      '.uzm-fai-sub{font-size:12.5px;line-height:1.55;color:var(--muted,#64748b);margin-bottom:12px}' +
+      '.uzm-fai-warn{display:flex;gap:8px;align-items:flex-start;margin:0 0 12px;padding:9px 11px;' +
+        'border:1px solid rgba(217,119,6,.42);background:rgba(217,119,6,.10);' +
+        'border-radius:10px;font-size:12px;line-height:1.5}' +
+      '.uzm-fai-row{display:flex;align-items:center;gap:8px;padding:9px 0;' +
+        'border-top:1px solid var(--border,rgba(0,0,0,.08))}' +
+      '.uzm-fai-nm{font-size:14px;font-weight:600;flex:1;min-width:0}' +
+      '.uzm-fai-lim{display:block;font-size:11px;font-weight:400;color:var(--muted,#64748b);' +
+        'margin-top:2px;white-space:normal}' +
+      '.uzm-fai-tag{font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;flex:none}' +
+      '.uzm-fai-ok{background:rgba(16,163,112,.16);color:#0e9d70}' +
+      '.uzm-fai-no{background:rgba(100,116,139,.16);color:var(--muted,#64748b)}' +
+      '.uzm-fai-lg{background:rgba(220,38,38,.14);color:#dc2626}' +
+      '.uzm-fai-inp{width:100%;box-sizing:border-box;margin-top:6px;padding:8px 10px;font-size:13px;' +
+        'border:1px solid var(--border,rgba(0,0,0,.14));border-radius:9px;' +
+        'background:var(--bg,#fff);color:inherit}' +
+      '.uzm-fai-btns{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}' +
+      '.uzm-fai-b{border:0;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;' +
+        'cursor:pointer;background:var(--chip,#eef2f6);color:inherit}' +
+      '.uzm-fai-b.pri{background:var(--accent,#2f6fd0);color:#fff}' +
+      '.uzm-fai-res{font-size:11.5px;margin-top:5px;line-height:1.5;white-space:pre-wrap;' +
+        'color:var(--muted,#64748b)}' +
+      '.uzm-fai-sw{display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 0}' +
+      '.uzm-fai-sw input{width:17px;height:17px;flex:none}';
+    document.head.appendChild(s);
+  }
+
+  function yop() {
+    var bg = document.getElementById('uzm-fai-bg');
+    if (bg && bg.parentNode) bg.parentNode.removeChild(bg);
+    document.removeEventListener('keydown', esc);
+  }
+  function esc(e) { if (e.key === 'Escape') yop(); }
+
+  function el(tag, cls, txt) {
+    var d = document.createElement(tag);
+    if (cls) d.className = cls;
+    if (txt != null) d.textContent = txt;          // textContent — XSS yo'q
+    return d;
+  }
+
+  function qator(p) {
+    var wrap = el('div', 'uzm-fai-row');
+    var chap = el('div', 'uzm-fai-nm', p.nom);
+    var lim = el('span', 'uzm-fai-lim', p.limit + (p.vision ? ' · rasm o`qiydi' : '') +
+      (p.olish ? ' · kalit: ' + p.olish : ''));
+    chap.appendChild(lim);
+    wrap.appendChild(chap);
+
+    if (p.logQiladi) wrap.appendChild(el('span', 'uzm-fai-tag uzm-fai-lg', 'LOG'));
+    wrap.appendChild(el('span', 'uzm-fai-tag ' + (p.zanjirda ? 'uzm-fai-ok' : 'uzm-fai-no'),
+      p.zanjirda ? 'FAOL' : 'o`chiq'));
+
+    var blok = el('div');
+    blok.style.padding = '0 0 10px';
+
+    var inp = null;
+    if (p.kalit !== 'kerak emas') {
+      inp = document.createElement('input');
+      inp.className = 'uzm-fai-inp';
+      inp.type = 'password';
+      inp.autocomplete = 'off';
+      inp.placeholder = p.kalitBor
+        ? 'kalit saqlangan — almashtirish uchun yangisini yozing'
+        : ('API kalit — ' + p.nom);
+      inp.setAttribute('aria-label', p.nom + ' API kalit');
+      blok.appendChild(inp);
+    }
+
+    var btns = el('div', 'uzm-fai-btns');
+    var natija = el('div', 'uzm-fai-res');
+
+    if (inp) {
+      var saqla = el('button', 'uzm-fai-b pri', 'Saqlash');
+      saqla.type = 'button';
+      saqla.addEventListener('click', function () {
+        var a = api(); if (!a) return;
+        natija.textContent = a.kalitOrnat(p.id, inp.value);
+        inp.value = '';
+        setTimeout(chizQayta, 350);
+      });
+      btns.appendChild(saqla);
+    }
+
+    var sina = el('button', 'uzm-fai-b', 'Sinash');
+    sina.type = 'button';
+    sina.addEventListener('click', function () {
+      var a = api(); if (!a) return;
+      natija.textContent = 'sinalmoqda…';
+      a.sinov(p.id).then(function (r) {
+        natija.textContent = r.ok
+          ? ('✅ ishladi · ' + r.ms + ' ms · «' + r.javob + '»')
+          : ('❌ ' + r.xato);
+      }).catch(function (e) { natija.textContent = '❌ ' + (e && e.message); });
+    });
+    btns.appendChild(sina);
+
+    var toggle = el('button', 'uzm-fai-b', p.yoqilgan ? 'O`chirish' : 'Yoqish');
+    toggle.type = 'button';
+    toggle.addEventListener('click', function () {
+      var a = api(); if (!a) return;
+      a.provayderYoq(p.id, !p.yoqilgan);
+      chizQayta();
+    });
+    btns.appendChild(toggle);
+
+    if (p.kalit !== 'kerak emas') {
+      var holat = el('span', 'uzm-fai-res', 'kalit: ' + p.kalit);
+      holat.style.alignSelf = 'center';
+      btns.appendChild(holat);
+    }
+
+    blok.appendChild(btns);
+    blok.appendChild(natija);
+
+    var frag = document.createDocumentFragment();
+    frag.appendChild(wrap);
+    frag.appendChild(blok);
+    return frag;
+  }
+
+  function chizQayta() {
+    var box = document.getElementById('uzm-fai-box');
+    if (!box) return;
+    var a = api(); if (!a) return;
+    var h = a.holat();
+
+    while (box.firstChild) box.removeChild(box.firstChild);
+
+    var sw1 = el('label', 'uzm-fai-sw');
+    var c1 = document.createElement('input');
+    c1.type = 'checkbox'; c1.checked = (h.qatlam === 'yoqilgan');
+    c1.addEventListener('change', function () { a.qatlamYoq(c1.checked); chizQayta(); });
+    sw1.appendChild(c1);
+    sw1.appendChild(el('span', null, 'Bepul zaxira provayderlar yoqilgan'));
+    box.appendChild(sw1);
+
+    var sw2 = el('label', 'uzm-fai-sw');
+    var c2 = document.createElement('input');
+    c2.type = 'checkbox'; c2.checked = !!h.faqatMaxfiy;
+    c2.addEventListener('change', function () { a.faqatMaxfiy(c2.checked); chizQayta(); });
+    sw2.appendChild(c2);
+    sw2.appendChild(el('span', null, 'Faqat maxfiy provayderlar (LOG belgilanganlar chiqariladi)'));
+    box.appendChild(sw2);
+
+    box.appendChild(el('div', 'uzm-fai-sub',
+      'Zanjirda ' + h.zanjirUzunligi + ' provayder. Tartib: kalitli → kalitsiz. ' +
+      'Asosiy AI (Gemini) ishlayotgan bo`lsa bular umuman chaqirilmaydi.'));
+
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < h.provayderlar.length; i++) frag.appendChild(qator(h.provayderlar[i]));
+    box.appendChild(frag);
+  }
+
+  function och() {
+    if (!api()) { if (window.toast) window.toast('Bepul AI moduli yuklanmadi'); return; }
+    stil(); yop();
+
+    var bg = el('div', 'uzm-fai-bg');
+    bg.id = 'uzm-fai-bg';
+    bg.addEventListener('click', function (e) { if (e.target === bg) yop(); });
+
+    var box = el('div', 'uzm-fai');
+    var top = el('div', 'uzm-fai-top');
+    top.appendChild(el('div', 'uzm-fai-h', 'Bepul AI provayderlar'));
+    var x = el('button', 'uzm-fai-x', '✕');
+    x.type = 'button';
+    x.setAttribute('aria-label', 'Yopish');
+    x.addEventListener('click', yop);
+    top.appendChild(x);
+    box.appendChild(top);
+
+    box.appendChild(el('div', 'uzm-fai-sub',
+      'Asosiy AI ishlamay qolsa (kalit bekor qilinsa, model o`chirilsa, kvota tugasa) ' +
+      'so`rov shu provayderlarga o`tadi. Kalitsizlari ro`yxatdan o`tishni talab qilmaydi.'));
+
+    var w = el('div', 'uzm-fai-warn');
+    w.appendChild(el('b', null, '⚠'));
+    w.appendChild(el('span', null,
+      'Bular uchinchi tomon serverlari. «LOG» belgisi — provayder so`rovni model ' +
+      'o`qitish uchun saqlashi mumkinligini bildiradi (manba: provayder hujjati). ' +
+      'Bemor ismi, tug`ilgan sanasi va boshqa identifikatorlarni yubormang. ' +
+      'AI javobi klinik qaror emas — shifokor nazorati talab qilinadi.'));
+    box.appendChild(w);
+
+    var ich = el('div');
+    ich.id = 'uzm-fai-box';
+    box.appendChild(ich);
+
+    bg.appendChild(box);
+    document.body.appendChild(bg);
+    document.addEventListener('keydown', esc);
+    chizQayta();
+    try { x.focus(); } catch (e) {}
+  }
+
+  window.UZMEDFreeAiOch = och;
+
+  /* ── Sozlamalar ro'yxatiga element qo'shish (lazy + retry mount) ── */
+  var SVG = 'http://www.w3.org/2000/svg';
+  function ikonka() {
+    var s = document.createElementNS(SVG, 'svg');
+    s.setAttribute('width', '20'); s.setAttribute('height', '20');
+    s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none');
+    s.setAttribute('stroke', '#9598a8'); s.setAttribute('stroke-width', '2');
+    var a = document.createElementNS(SVG, 'path');
+    a.setAttribute('d', 'M12 2a7 7 0 0 0-4 12.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3A7 7 0 0 0 12 2z');
+    var b = document.createElementNS(SVG, 'line');
+    b.setAttribute('x1', '10'); b.setAttribute('y1', '22');
+    b.setAttribute('x2', '14'); b.setAttribute('y2', '22');
+    s.appendChild(a); s.appendChild(b);
+    return s;
+  }
+
+  function mount() {
+    try {
+      var scr = document.getElementById('sozlamalar-screen');
+      if (!scr) return false;
+      if (document.getElementById('uzm-fai-item')) return true;
+
+      var it = el('div', 'settings-item');
+      it.id = 'uzm-fai-item';
+      var ic = el('div', 'settings-icon');
+      ic.appendChild(ikonka());
+      it.appendChild(ic);
+      it.appendChild(el('div', 'settings-label', 'Bepul AI provayderlar'));
+
+      var val = el('div', 'settings-value-text', '—');
+      val.id = 'uzm-fai-val';
+      it.appendChild(val);
+      it.appendChild(el('div', 'settings-arrow', '›'));
+      it.addEventListener('click', och);
+
+      scr.appendChild(it);
+      yangilaVal();
+      return true;
+    } catch (e) { console.warn('[UZMED bepul AI UI]', e); return false; }
+  }
+
+  function yangilaVal() {
+    var v = document.getElementById('uzm-fai-val');
+    var a = api();
+    if (!v || !a) return;
+    try {
+      var h = a.holat();
+      v.textContent = (h.qatlam === 'o`chiq') ? 'o`chiq' : (h.zanjirUzunligi + ' ta');
+    } catch (e) {}
+  }
+
+  var urinish = 0;
+  (function retry() {
+    if (mount() || ++urinish > 60) return;          // 60 × 400 ms = 24 s, keyin to'xtaydi
+    setTimeout(retry, 400);
+  })();
+})();
+</script>
